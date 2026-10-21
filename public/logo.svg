@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 72" width="220" height="72" fill="none">
+  <defs>
+    <linearGradient id="logoBg" x1="4" y1="4" x2="68" y2="68" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="55%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    <linearGradient id="logoBar1" x1="16" y1="18" x2="54" y2="18" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E0E7FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="64" height="64" rx="18" fill="url(#logoBg)" />
+  <rect x="5" y="5" width="62" height="62" rx="17" stroke="white" stroke-opacity="0.24" stroke-width="1.5"/>
+  <rect x="17" y="17" width="38" height="9" rx="4.5" fill="url(#logoBar1)"/>
+  <rect x="17" y="31.5" width="29" height="9" rx="4.5" fill="white" fill-opacity="0.92"/>
+  <rect x="17" y="46" width="16" height="9" rx="4.5" fill="white" fill-opacity="0.78"/>
+  <circle cx="44" cy="50.5" r="4.5" fill="#FDE047"/>
+  <text x="82" y="46" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="36" font-weight="800" letter-spacing="-1" fill="#6366F1">Flow</text>
+  <text x="83" y="61" font-family="Inter, -apple-system, sans-serif" font-size="9.5" font-weight="600" letter-spacing="1.6" fill="#94A3B8">AI WORKSPACE &amp; KANBAN</text>
+</svg>
