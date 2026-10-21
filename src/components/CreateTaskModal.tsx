@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FolderPlus, Plus, UserPlus, X } from 'lucide-react';
+import { FolderPlus, Pencil, Plus, Trash2, UserPlus, X } from 'lucide-react';
 import type {
   Member,
   Project,
@@ -14,6 +14,8 @@ export type ModalMode = 'task' | 'project' | 'member' | null;
 interface CreateTaskModalProps {
   mode: ModalMode;
   defaults?: Partial<Task>;
+  editingProject?: Project | null;
+  editingMember?: Member | null;
   projects: Project[];
   members: Member[];
   onClose: () => void;
@@ -31,12 +33,32 @@ interface CreateTaskModalProps {
     color: string;
     description: string;
   }) => Promise<void>;
+  onUpdateProject: (
+    id: string,
+    payload: {
+      name: string;
+      code: string;
+      color: string;
+      description: string;
+    }
+  ) => Promise<void>;
+  onDeleteProject?: (project: Project) => void;
   onCreateMember: (payload: {
     name: string;
     role: string;
     avatar_bg: string;
     capacity_hours: number;
   }) => Promise<void>;
+  onUpdateMember: (
+    id: string,
+    payload: {
+      name: string;
+      role: string;
+      avatar_bg: string;
+      capacity_hours: number;
+    }
+  ) => Promise<void>;
+  onDeleteMember?: (member: Member) => void;
 }
 
 const PROJECT_COLORS = [
@@ -61,12 +83,18 @@ const AVATAR_GRADIENTS = [
 export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   mode,
   defaults,
+  editingProject,
+  editingMember,
   projects,
   members,
   onClose,
   onCreateTask,
   onCreateProject,
+  onUpdateProject,
+  onDeleteProject,
   onCreateMember,
+  onUpdateMember,
+  onDeleteMember,
 }) => {
   // Task form state
   const [title, setTitle] = useState('');
@@ -111,8 +139,32 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       setEstimateHours(4);
       setTagsText('');
       setSubtasksText('');
+    } else if (mode === 'project') {
+      if (editingProject) {
+        setProjName(editingProject.name);
+        setProjCode(editingProject.code);
+        setProjColor(editingProject.color || PROJECT_COLORS[0]);
+        setProjDesc(editingProject.description || '');
+      } else {
+        setProjName('');
+        setProjCode('');
+        setProjColor(PROJECT_COLORS[0]);
+        setProjDesc('');
+      }
+    } else if (mode === 'member') {
+      if (editingMember) {
+        setMemName(editingMember.name);
+        setMemRole(editingMember.role || '团队成员');
+        setMemAvatarBg(editingMember.avatar_bg || AVATAR_GRADIENTS[0].value);
+        setMemCapacity(editingMember.capacity_hours || 40);
+      } else {
+        setMemName('');
+        setMemRole('全栈研发工程师');
+        setMemAvatarBg(AVATAR_GRADIENTS[0].value);
+        setMemCapacity(40);
+      }
     }
-  }, [mode, defaults, projects, members]);
+  }, [mode, defaults, editingProject, editingMember, projects, members]);
 
   if (!mode) return null;
 
@@ -154,14 +206,19 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const handleProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!projName.trim()) return;
-    await onCreateProject({
+    const payload = {
       name: projName.trim(),
       code:
         projCode.trim().toUpperCase() ||
         projName.trim().slice(0, 3).toUpperCase(),
       color: projColor,
       description: projDesc.trim(),
-    });
+    };
+    if (editingProject) {
+      await onUpdateProject(editingProject.id, payload);
+    } else {
+      await onCreateProject(payload);
+    }
     setProjName('');
     setProjCode('');
     setProjDesc('');
@@ -171,12 +228,17 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const handleMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!memName.trim()) return;
-    await onCreateMember({
+    const payload = {
       name: memName.trim(),
       role: memRole.trim() || '团队成员',
       avatar_bg: memAvatarBg,
       capacity_hours: memCapacity,
-    });
+    };
+    if (editingMember) {
+      await onUpdateMember(editingMember.id, payload);
+    } else {
+      await onCreateMember(payload);
+    }
     setMemName('');
     onClose();
   };
@@ -197,17 +259,25 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             )}
             {mode === 'project' && (
               <>
-                <FolderPlus className="w-4 h-4 text-emerald-500" />
+                {editingProject ? (
+                  <Pencil className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <FolderPlus className="w-4 h-4 text-emerald-500" />
+                )}
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  新建项目看板维度
+                  {editingProject ? `编辑项目：${editingProject.name}` : '新建项目看板维度'}
                 </h3>
               </>
             )}
             {mode === 'member' && (
               <>
-                <UserPlus className="w-4 h-4 text-amber-500" />
+                {editingMember ? (
+                  <Pencil className="w-4 h-4 text-amber-500" />
+                ) : (
+                  <UserPlus className="w-4 h-4 text-amber-500" />
+                )}
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  新增团队相关人员
+                  {editingMember ? `编辑成员：${editingMember.name}` : '新增团队相关人员'}
                 </h3>
               </>
             )}
@@ -481,25 +551,42 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
-              >
-                创建项目
-              </button>
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <div>
+                {editingProject && onDeleteProject && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteProject(editingProject);
+                      onClose();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    删除项目
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                >
+                  {editingProject ? '保存修改' : '创建项目'}
+                </button>
+              </div>
             </div>
           </form>
         )}
 
-        {/* Member Creation Form */}
+        {/* Member Creation / Edit Form */}
         {mode === 'member' && (
           <form onSubmit={handleMemberSubmit} className="p-6 space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3">
@@ -561,20 +648,37 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold"
-              >
-                添加成员
-              </button>
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <div>
+                {editingMember && onDeleteMember && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDeleteMember(editingMember);
+                      onClose();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    删除成员
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold"
+                >
+                  {editingMember ? '保存修改' : '添加成员'}
+                </button>
+              </div>
             </div>
           </form>
         )}

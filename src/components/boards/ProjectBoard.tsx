@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle2, FolderPlus, Plus } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FolderPlus, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { Member, Project, Task } from '../../types';
 import { getDueStatus } from '../../utils/dateUtils';
 import { TaskCard } from '../TaskCard';
@@ -12,6 +12,8 @@ interface ProjectBoardProps {
   onSelectTask: (task: Task) => void;
   onQuickCreate: (defaults: Partial<Task>) => void;
   onOpenNewProject: () => void;
+  onEditProject: (project: Project) => void;
+  onDeleteProject: (project: Project) => void;
   onStartPomodoro: (task: Task) => void;
 }
 
@@ -23,6 +25,8 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   onSelectTask,
   onQuickCreate,
   onOpenNewProject,
+  onEditProject,
+  onDeleteProject,
   onStartPomodoro,
 }) => {
   const [dragOverProj, setDragOverProj] = useState<string | null>(null);
@@ -100,14 +104,32 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => onQuickCreate({ project_id: proj.id })}
-                    className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors shrink-0"
-                    title={`在「${proj.name}」下新建任务`}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onEditProject(proj)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                      title={`编辑项目「${proj.name}」`}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteProject(proj)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                      title={`删除项目「${proj.name}」`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onQuickCreate({ project_id: proj.id })}
+                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                      title={`在「${proj.name}」下新建任务`}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Project Progress & Health Bar */}

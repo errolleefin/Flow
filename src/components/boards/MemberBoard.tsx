@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Plus, UserCheck, UserPlus, Users } from 'lucide-react';
+import { Clock, Pencil, Plus, Trash2, UserCheck, UserPlus, Users } from 'lucide-react';
 import type { Member, Project, Task } from '../../types';
 import { TaskCard } from '../TaskCard';
 
@@ -11,6 +11,8 @@ interface MemberBoardProps {
   onSelectTask: (task: Task) => void;
   onQuickCreate: (defaults: Partial<Task>) => void;
   onOpenNewMember: () => void;
+  onEditMember: (member: Member) => void;
+  onDeleteMember: (member: Member) => void;
   onStartPomodoro: (task: Task) => void;
 }
 
@@ -22,6 +24,8 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
   onSelectTask,
   onQuickCreate,
   onOpenNewMember,
+  onEditMember,
+  onDeleteMember,
   onStartPomodoro,
 }) => {
   const [dragOverMember, setDragOverMember] = useState<string | null>(null);
@@ -140,14 +144,32 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => onQuickCreate({ assignee_id: mem.id })}
-                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title={`指派新任务给 ${mem.name}`}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onEditMember(mem)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        title={`编辑成员「${mem.name}」`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteMember(mem)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        title={`删除成员「${mem.name}」`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onQuickCreate({ assignee_id: mem.id })}
+                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        title={`指派新任务给 ${mem.name}`}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Workload Saturation Bar */}

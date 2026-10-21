@@ -5,8 +5,9 @@ import {
   FolderKanban,
   Kanban,
   Layers,
+  Pencil,
   Plus,
-  Sparkles,
+  Trash2,
   Users,
   AlertTriangle,
 } from 'lucide-react';
@@ -23,7 +24,11 @@ interface SidebarProps {
   filters: FilterState;
   onUpdateFilter: (patch: Partial<FilterState>) => void;
   onOpenNewProject: () => void;
+  onEditProject: (project: Project) => void;
+  onDeleteProject: (project: Project) => void;
   onOpenNewMember: () => void;
+  onEditMember: (member: Member) => void;
+  onDeleteMember: (member: Member) => void;
 }
 
 export const BOARD_VIEWS: Array<{
@@ -79,7 +84,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   filters,
   onUpdateFilter,
   onOpenNewProject,
+  onEditProject,
+  onDeleteProject,
   onOpenNewMember,
+  onEditMember,
+  onDeleteMember,
 }) => {
   const overdueCount = tasks.filter(
     (t) => getDueStatus(t.due_date, t.status) === 'overdue'
@@ -235,31 +244,59 @@ export const Sidebar: React.FC<SidebarProps> = ({
               const isSelected = filters.projectId === proj.id;
 
               return (
-                <button
+                <div
                   key={proj.id}
-                  type="button"
-                  onClick={() =>
-                    onUpdateFilter({
-                      projectId: isSelected ? 'all' : proj.id,
-                    })
-                  }
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                  className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                     isSelected
                       ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-semibold'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateFilter({
+                        projectId: isSelected ? 'all' : proj.id,
+                      })
+                    }
+                    className="flex-1 flex items-center gap-2 min-w-0 text-left"
+                  >
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: proj.color }}
                     />
                     <span className="truncate">{proj.name}</span>
+                  </button>
+                  <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                    <span className="font-mono text-[10px] text-slate-400 group-hover:hidden">
+                      {doneCount}/{count}
+                    </span>
+                    <div className="hidden group-hover:flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditProject(proj);
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                        title="编辑项目"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteProject(proj);
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                        title="删除项目"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                  <span className="font-mono text-[10px] text-slate-400 shrink-0 ml-1">
-                    {doneCount}/{count}
-                  </span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -291,21 +328,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
               const isSelected = filters.memberId === mem.id;
 
               return (
-                <button
+                <div
                   key={mem.id}
-                  type="button"
-                  onClick={() =>
-                    onUpdateFilter({
-                      memberId: isSelected ? 'all' : mem.id,
-                    })
-                  }
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                  className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                     isSelected
                       ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-semibold'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateFilter({
+                        memberId: isSelected ? 'all' : mem.id,
+                      })
+                    }
+                    className="flex-1 flex items-center gap-2 min-w-0 text-left"
+                  >
                     <span
                       className={`w-5 h-5 rounded-full bg-gradient-to-br ${mem.avatar_bg} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
                     >
@@ -319,14 +358,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {mem.role}
                       </span>
                     </div>
+                  </button>
+                  <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                    <span
+                      className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-slate-500 group-hover:hidden"
+                      title="进行中关联任务数"
+                    >
+                      {activeCount}
+                    </span>
+                    <div className="hidden group-hover:flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEditMember(mem);
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                        title="编辑成员"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteMember(mem);
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                        title="删除成员"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                  <span
-                    className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-slate-500"
-                    title="进行中关联任务数"
-                  >
-                    {activeCount}
-                  </span>
-                </button>
+                </div>
               );
             })}
           </div>

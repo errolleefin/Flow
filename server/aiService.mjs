@@ -205,6 +205,32 @@ ${JSON.stringify(tasksSummary, null, 2)}
 {
   "type": "delete_task",
   "task_key": "AI-101"
+}
+
+6. 编辑或删除项目 (update_project / delete_project)：
+{
+  "type": "update_project",
+  "name": "原项目名称",
+  "new_name": "新项目名称",
+  "code": "新前缀",
+  "description": "新说明"
+}
+{
+  "type": "delete_project",
+  "name": "要删除的项目名称"
+}
+
+7. 编辑或删除成员 (update_member / delete_member)：
+{
+  "type": "update_member",
+  "name": "原成员姓名",
+  "new_name": "可选新姓名",
+  "role": "可选新职位角色",
+  "capacity_hours": 36
+}
+{
+  "type": "delete_member",
+  "name": "要删除的成员姓名"
 }`;
 }
 
@@ -566,6 +592,83 @@ export function executeAiActions(db, actions) {
           task_key: existing.task_key,
           title: existing.title,
           summary: `删除任务 [${existing.task_key}] ${existing.title}`,
+        });
+      }
+    } else if (type === 'update_project' && act.name) {
+      const existing = db
+        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
+        .get(String(act.name).trim());
+      if (existing) {
+        const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
+        const nextCode = act.code ? String(act.code).trim().toUpperCase() : existing.code;
+        const nextDesc = act.description !== undefined ? String(act.description) : existing.description;
+        db.prepare('UPDATE projects SET name = ?, code = ?, description = ? WHERE id = ?').run(
+          nextName,
+          nextCode,
+          nextDesc,
+          existing.id
+        );
+        operations.push({
+          kind: 'project_created',
+          id: existing.id,
+          title: nextName,
+          summary: `已更新项目 [${nextCode}] ${nextName}`,
+        });
+      }
+    } else if (type === 'delete_project' && act.name) {
+      const existing = db
+        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
+        .get(String(act.name).trim());
+      if (existing) {
+        db.prepare('DELETE FROM projects WHERE id = ?').run(existing.id);
+        operations.push({
+          kind: 'task_deleted',
+          id: existing.id,
+          title: existing.name,
+          summary: `已删除项目「${existing.name}」`,
+        });
+      }
+    } else if (type === 'update_member' && act.name) {
+      const existing = db
+        .prepare('SELECT * FROM members WHERE LOWER(name) = LOWER(?)')
+        .get(String(act.name).trim());
+      if (existing) {
+        const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
+        const nextRole = act.role ? String(act.role).trim() : existing.role;
+        const nextCap = act.capacity_hours ? Number(act.capacity_hours) : existing.capacity_hours;
+        db.prepare('UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?').run(
+          nextName,
+          nextRole,
+          nextCap,
+          existing.id
+        );
+        operations.push({
+          kind: 'member_created',
+          id: existing.id,
+          title: nextName,
+          summary: `已更新成员：${nextName} (${nextRole}, ${nextCap}h/周)`,
+        });
+      }
+    } else if (type === 'delete_member' && act.name) {
+      const existing = db
+        .prepare('SELECT * FROM members WHERE LOWER(name) = LOWER(?)')
+        .get(String(act.name).trim());
+      if (existing) {
+        db.prepare('UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?').run(existing.id);
+        const allTasks = db.prepare('SELECT id, collaborator_ids FROM tasks').all();
+        const upd = db.prepare('UPDATE tasks SET collaborator_ids = ? WHERE id = ?');
+        for (const t of allTasks) {
+          const list = JSON.parse(t.collaborator_ids || '[]');
+          if (Array.isArray(list) && list.includes(existing.id)) {
+            upd.run(JSON.stringify(list.filter((id) => id !== existing.id)), t.id);
+          }
+        }
+        db.prepare('DELETE FROM members WHERE id = ?').run(existing.id);
+        operations.push({
+          kind: 'task_deleted',
+          id: existing.id,
+          title: existing.name,
+          summary: `已移除团队成员「${existing.name}」`,
         });
       }
     }

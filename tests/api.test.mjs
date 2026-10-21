@@ -167,4 +167,63 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   const comment = await commentRes.json();
   assert.equal(comment.type, 'comment');
   assert.equal(comment.content, '接口响应速度非常快，已完成联调！');
+
+  // 7. Edit Project (PATCH /api/projects/:id)
+  const editProjRes = await fetch(`${baseUrl}/api/projects/${secondProject.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: '移动端 4.0 架构',
+      code: 'MOB',
+      color: '#ec4899',
+      description: '全新跨端渲染引擎',
+    }),
+  });
+  assert.equal(editProjRes.status, 200);
+  const editedProj = await editProjRes.json();
+  assert.equal(editedProj.name, '移动端 4.0 架构');
+  assert.equal(editedProj.code, 'MOB');
+  assert.equal(editedProj.color, '#ec4899');
+
+  // 8. Edit Member (PATCH /api/members/:id)
+  const editMemRes = await fetch(`${baseUrl}/api/members/${targetCollab.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: '李薇薇',
+      role: '设计总监',
+      capacity_hours: 32,
+    }),
+  });
+  assert.equal(editMemRes.status, 200);
+  const editedMem = await editMemRes.json();
+  assert.equal(editedMem.name, '李薇薇');
+  assert.equal(editedMem.role, '设计总监');
+  assert.equal(editedMem.capacity_hours, 32);
+
+  // 9. Delete Member (DELETE /api/members/:id) and verify tasks are unassigned safely without being deleted
+  const delMemRes = await fetch(`${baseUrl}/api/members/${targetCollab.id}`, {
+    method: 'DELETE',
+  });
+  assert.equal(delMemRes.status, 200);
+
+  const afterMemDelBoot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
+  assert.equal(afterMemDelBoot.members.length, 1);
+  const taskAfterMemDel = afterMemDelBoot.tasks.find((item) => item.id === createdTask.id);
+  assert.ok(taskAfterMemDel, 'Task should still exist after its assignee is deleted');
+  assert.equal(taskAfterMemDel.assignee_id, null, 'Task assignee_id should be cleared to null');
+  assert.deepEqual(
+    taskAfterMemDel.collaborator_ids,
+    [],
+    'Deleted member should be removed from collaborator_ids'
+  );
+
+  // 10. Delete Project (DELETE /api/projects/:id) and verify cascade cleanup
+  const delProjRes = await fetch(`${baseUrl}/api/projects/${secondProject.id}`, {
+    method: 'DELETE',
+  });
+  assert.equal(delProjRes.status, 200);
+  const afterProjDelBoot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
+  assert.equal(afterProjDelBoot.projects.length, 1);
+  assert.equal(afterProjDelBoot.tasks.length, 0);
 });

@@ -5,8 +5,11 @@
 <h1 align="center">Flow — AI-Native Multi-Board Work Todo &amp; Kanban</h1>
 
 <p align="center">
-  <strong>An AI-powered, self-hosted multi-dimensional work Todo &amp; Kanban workspace inspired by Linear, Plane, Planka, and Notion.</strong><br/>
-  <strong>融合 Linear、Plane、Planka 与 Notion 设计精髓，内置 OpenAI 兼容智能助理的多维工作 Todo 与看板系统。</strong>
+  <strong>融合 Linear、Plane、Planka 与 Notion 设计精髓，内置 OpenAI 兼容智能助理的多维工作 Todo 与敏捷看板系统。</strong>
+</p>
+
+<p align="center">
+  <strong>简体中文</strong> | <a href="./README.en.md">English</a>
 </p>
 
 <p align="center">
@@ -20,43 +23,31 @@
 
 ---
 
-## 📌 GitHub 仓库简介（About / Description）
+## 核心特性
 
-> **中文版（可直接复制到 GitHub Description）：**
-> 🌊 Flow：AI 驱动的现代多维工作 Todo 与敏捷看板系统。围绕「任务、项目、截止日期、相关人员」构建 5 大联动视图（状态看板/项目看板/人员负载/死线月历/效能仪表盘），内置 OpenAI 兼容智能助理，支持通过自然语言对话或会议纪要自动拆单入库。支持 Windows、Docker、Ubuntu VPS 与 Vercel + Supabase 部署。
->
-> **English Version (For GitHub About):**
-> 🌊 Flow: An AI-native, Linear-style multi-dimensional Work Todo & Kanban workspace. Features 5 synchronized views (Status, Project, Team Workload, Due Date Calendar, Analytics) and a built-in OpenAI-compatible AI Assistant that turns natural language & meeting notes into structured tasks, projects, and subtasks. Ready for Windows, Docker, Ubuntu VPS, and Vercel + Supabase.
->
-> **Recommended GitHub Topics:**
-> `kanban` `todo-app` `project-management` `ai-assistant` `linear` `openai-compatible` `sqlite` `react` `self-hosted` `productivity` `docker` `supabase`
-
----
-
-## ✨ 核心特性 (Key Features)
-
-### 1. 🤖 内置 AI 智能助理（OpenAI Compatible + 永久化配置）
-- **网页端可视化配置与永久保存**：支持在网页内直接配置任意 OpenAI 兼容接口（**OpenAI、DeepSeek、硅基流动 SiliconFlow、阿里云百炼 DashScope、OpenRouter、本地 Ollama** 等），URL / Model / API Key 永久持久化保存。
-- **自然语言自动拆单与录入数据库**：直接发送口语指令或粘贴会议纪要，AI 自动识别并创建/关联**所属项目**、补齐**相关人员（主负责 + 多协作人）**、推算**截止日期 (`YYYY-MM-DD`)**、判定**四级优先级**并拆解生成**子任务检查清单 (`Subtasks`)**。
+### 1. 内置 AI 智能助理（OpenAI Compatible + 永久化配置）
+- **网页端可视化配置与永久保存**：支持在网页内直接配置任意 OpenAI 兼容接口（OpenAI、DeepSeek、硅基流动 SiliconFlow、阿里云百炼 DashScope、OpenRouter、本地 Ollama 等），URL / Model / API Key 永久持久化保存至数据库。
+- **自然语言自动拆单与录入数据库**：直接发送口语指令或粘贴会议纪要，AI 自动识别并创建/修改/删除所属项目、团队相关人员（主负责 + 多协作人），自动推算截止日期 (`YYYY-MM-DD`)、判定四级优先级并拆解生成子任务检查清单 (`Subtasks`)。
 - **可视化入库回执卡片**：每次对话执行的数据库变更均生成交互式回执卡片，点击即可打开任务详情，且底层看板实时同步刷新。
 
-### 2. 📊 五大维度看板无缝联动（拖拽自动反推并更新属性）
-同一套底层数据支持在 **5 种视图** 间秒级切换，且在任意看板**跨列拖拽卡片**会自动反推并更新对应的维度字段：
+### 2. 五大维度看板无缝联动（拖拽自动反推并更新属性）
+同一套底层数据支持在 5 种视图间秒级切换，且在任意看板跨列拖拽卡片会自动反推并更新对应的维度字段：
 1. **状态流转看板（Status Kanban）**：按 `待规划 -> 待处理 -> 进行中 -> 审核/阻塞 -> 已完成` 推进工作流，跨列拖拽自动更新 `status`。
-2. **项目维度看板（Project Board）**：按 `项目名` 分列聚合，实时展示项目色标、完成率进度条与逾期告警，跨列拖拽自动迁移任务的 `project_id`。
-3. **人员负载看板（Personnel Workload Board）**：按 `相关人员` 分列，动态计算成员周工时容量水位条（`<70% 余量充裕` / `70~100% 负载饱满` / `>100% 超载预警`），支持切换“仅主负责”或“含协同参与任务”，跨列拖拽直接改派主负责人 `assignee_id`。
-4. **截止日期看板 & 月度日历双模视图（Due Date & Calendar）**：提供 **5 级死线预警看板**（已逾期 / 今日到期 / 未来 3 天 / 远期规划 / 未排期）与 **交互式月度排期日历**，跨列或跨日历日期格拖拽自动更新 `due_date`。
+2. **项目维度看板（Project Board）**：按 `项目名` 分列聚合，实时展示项目色标、完成率进度条与逾期告警，支持项目的创建、编辑与删除，跨列拖拽自动迁移任务的 `project_id`。
+3. **人员负载看板（Personnel Workload Board）**：按 `相关人员` 分列，动态计算成员周工时容量水位条（`<70% 余量充裕` / `70~100% 负载饱满` / `>100% 超载预警`），支持团队成员的创建、编辑与安全移除，支持切换“仅主负责”或“含协同参与任务”，跨列拖拽直接改派主负责人 `assignee_id`。
+4. **截止日期看板 & 月度日历双模视图（Due Date & Calendar）**：提供 5 级死线预警看板（已逾期 / 今日到期 / 未来 3 天 / 远期规划 / 未排期）与交互式月度排期日历，跨列或跨日历日期格拖拽自动更新 `due_date`。
 5. **全局效能仪表盘（Analytics & Insights）**：汇总全局交付率、死线预警、专注工时投入、项目健康度对比图、团队负载排行与高优死线雷达表。
 
-### 3. ⚡ 极客级 UI/UX 与效率赋能
+### 3. 极客级 UI/UX 与效率赋能
+- **项目与人员全生命周期管理**：左侧导航栏与看板列头均支持一键新建、编辑、删除项目和相关人员；删除人员时自动将关联任务平顺解绑为未指派，保障任务数据安全。
 - **键盘流快捷键**：`Ctrl/Cmd + K` 唤起全局命令面板、`N` 键单键速建任务、`Ctrl/Cmd + J` 唤起 AI 智能助理、`Esc` 关闭抽屉。
 - **富任务详情抽屉**：支持子任务拆解与进度条、多选协同相关人员、自定义标签、团队评论与系统自动审计日志。
 - **专注番茄钟（Pomodoro Timer）**：25 分钟悬浮倒计时，结算后自动累加至任务实际投入时长。
-- **双主题与数据主权**：支持 **明亮浅色 / Linear Dark 暗黑模式** 一键切换，支持 **JSON 完整备份导入导出** 与 **CSV 报表导出**。
+- **双主题与数据主权**：支持明亮浅色 / Linear Dark 暗黑模式一键切换，支持 JSON 完整备份导入导出与 CSV 报表导出。
 
 ---
 
-## 🚀 全平台部署指南 (Deployment Guide)
+## 全平台部署指南
 
 **Flow** 支持 **Windows 桌面一键运行**、**Docker 容器化部署**、**Ubuntu VPS 本地部署** 以及 **Vercel + Supabase 云端部署** 四种模式。
 
@@ -197,7 +188,7 @@ server {
 
 #### 2. 一键部署至 Vercel
 1. 将本仓库 Fork 或推送到你的 GitHub 账号下。
-2. 登录 [Vercel](https://vercel.com/)，点击 **Add New... -> Project**，导入你的 `flow` 仓库。
+2. 登录 [Vercel](https://vercel.com/)，点击 **Add New... -> Project**，导入你的 `Flow` 仓库。
 3. **Framework Preset** 选择 `Vite`，Build Command 保持 `npm run build`，Output Directory 保持 `dist`（Vercel 会自动识别根目录下的 [`vercel.json`](./vercel.json)）。
 4. 在 **Environment Variables** 中添加环境变量（参考 [`.env.example`](./.env.example)）：
    ```env
@@ -205,11 +196,11 @@ server {
    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
    DATABASE_URL=postgresql://postgres:[PASSWORD]@db.your-project-id.supabase.co:5432/postgres
    ```
-5. 点击 **Deploy** 完成部署！同时你也可以随时通过网页顶部导航栏的 **「JSON 导出 / 导入」** 功能，在本地 SQLite 版本与云端版本之间一键无缝迁移所有任务与项目数据。
+5. 点击 **Deploy** 完成部署。同时你也可以随时通过网页顶部导航栏的「JSON 导出 / 导入」功能，在本地 SQLite 版本与云端版本之间无缝迁移所有任务、项目与人员数据。
 
 ---
 
-## 🧪 开发与自动化测试
+## 开发与自动化测试
 
 ```bash
 # 运行后端数据库、日期算法、过滤器与 AI 助理全套单元测试
@@ -221,6 +212,6 @@ npm run build
 
 ---
 
-## 📄 开源协议 (License)
+## 开源协议
 
-本项目基于 **MIT License** 开源，欢迎自由使用、修改与提交 Pull Request！
+本项目基于 **MIT License** 开源，欢迎自由使用、修改与提交 Pull Request。

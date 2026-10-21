@@ -50,6 +50,8 @@ export const App: React.FC = () => {
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [quickCreateDefaults, setQuickCreateDefaults] = useState<Partial<Task>>(
     {}
   );
@@ -289,6 +291,44 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleUpdateProject = async (
+    id: string,
+    payload: {
+      name: string;
+      code: string;
+      color: string;
+      description: string;
+    }
+  ) => {
+    try {
+      const updated = await apiClient.updateProject(id, payload);
+      setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      showToast(`已更新项目「${updated.name}」`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '更新项目失败', 'error');
+    }
+  };
+
+  const handleDeleteProject = async (project: Project) => {
+    const taskCount = tasks.filter((t) => t.project_id === project.id).length;
+    const msg =
+      taskCount > 0
+        ? `确定要删除项目「${project.name}」吗？该项目下的 ${taskCount} 项关联任务也将一并删除。`
+        : `确定要删除项目「${project.name}」吗？`;
+    if (!window.confirm(msg)) return;
+    try {
+      await apiClient.deleteProject(project.id);
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+      setTasks((prev) => prev.filter((t) => t.project_id !== project.id));
+      if (filters.projectId === project.id) {
+        setFilters((prev) => ({ ...prev, projectId: 'all' }));
+      }
+      showToast(`已删除项目「${project.name}」`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '删除项目失败', 'error');
+    }
+  };
+
   const handleCreateMember = async (payload: {
     name: string;
     role: string;
@@ -301,6 +341,51 @@ export const App: React.FC = () => {
       showToast(`已添加团队成员「${mem.name}」`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : '添加成员失败', 'error');
+    }
+  };
+
+  const handleUpdateMember = async (
+    id: string,
+    payload: {
+      name: string;
+      role: string;
+      avatar_bg: string;
+      capacity_hours: number;
+    }
+  ) => {
+    try {
+      const updated = await apiClient.updateMember(id, payload);
+      setMembers((prev) => prev.map((m) => (m.id === id ? updated : m)));
+      showToast(`已更新成员「${updated.name}」`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '更新成员失败', 'error');
+    }
+  };
+
+  const handleDeleteMember = async (member: Member) => {
+    if (
+      !window.confirm(
+        `确定要移除成员「${member.name}」吗？（其关联的任务不会被删除，将自动转为未指派）`
+      )
+    ) {
+      return;
+    }
+    try {
+      await apiClient.deleteMember(member.id);
+      setMembers((prev) => prev.filter((m) => m.id !== member.id));
+      setTasks((prev) =>
+        prev.map((t) => ({
+          ...t,
+          assignee_id: t.assignee_id === member.id ? null : t.assignee_id,
+          collaborator_ids: t.collaborator_ids.filter((id) => id !== member.id),
+        }))
+      );
+      if (filters.memberId === member.id) {
+        setFilters((prev) => ({ ...prev, memberId: 'all' }));
+      }
+      showToast(`已移除成员「${member.name}」`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '删除成员失败', 'error');
     }
   };
 
@@ -407,8 +492,24 @@ export const App: React.FC = () => {
         onUpdateFilter={(patch) =>
           setFilters((prev) => ({ ...prev, ...patch }))
         }
-        onOpenNewProject={() => setModalMode('project')}
-        onOpenNewMember={() => setModalMode('member')}
+        onOpenNewProject={() => {
+          setEditingProject(null);
+          setModalMode('project');
+        }}
+        onEditProject={(proj) => {
+          setEditingProject(proj);
+          setModalMode('project');
+        }}
+        onDeleteProject={handleDeleteProject}
+        onOpenNewMember={() => {
+          setEditingMember(null);
+          setModalMode('member');
+        }}
+        onEditMember={(mem) => {
+          setEditingMember(mem);
+          setModalMode('member');
+        }}
+        onDeleteMember={handleDeleteMember}
       />
 
       {/* Main Content Area */}
@@ -473,7 +574,15 @@ export const App: React.FC = () => {
                     setQuickCreateDefaults(defaults);
                     setModalMode('task');
                   }}
-                  onOpenNewProject={() => setModalMode('project')}
+                  onOpenNewProject={() => {
+                    setEditingProject(null);
+                    setModalMode('project');
+                  }}
+                  onEditProject={(proj) => {
+                    setEditingProject(proj);
+                    setModalMode('project');
+                  }}
+                  onDeleteProject={handleDeleteProject}
                   onStartPomodoro={(t) => setPomodoroTask(t)}
                 />
               )}
@@ -489,7 +598,15 @@ export const App: React.FC = () => {
                     setQuickCreateDefaults(defaults);
                     setModalMode('task');
                   }}
-                  onOpenNewMember={() => setModalMode('member')}
+                  onOpenNewMember={() => {
+                    setEditingMember(null);
+                    setModalMode('member');
+                  }}
+                  onEditMember={(mem) => {
+                    setEditingMember(mem);
+                    setModalMode('member');
+                  }}
+                  onDeleteMember={handleDeleteMember}
                   onStartPomodoro={(t) => setPomodoroTask(t)}
                 />
               )}
@@ -537,16 +654,26 @@ export const App: React.FC = () => {
         onStartPomodoro={(t) => setPomodoroTask(t)}
       />
 
-      {/* Create Task / Project / Member Modal */}
+      {/* Create / Edit Task / Project / Member Modal */}
       <CreateTaskModal
         mode={modalMode}
         defaults={quickCreateDefaults}
+        editingProject={editingProject}
+        editingMember={editingMember}
         projects={projects}
         members={members}
-        onClose={() => setModalMode(null)}
+        onClose={() => {
+          setModalMode(null);
+          setEditingProject(null);
+          setEditingMember(null);
+        }}
         onCreateTask={handleCreateTask}
         onCreateProject={handleCreateProject}
+        onUpdateProject={handleUpdateProject}
+        onDeleteProject={handleDeleteProject}
         onCreateMember={handleCreateMember}
+        onUpdateMember={handleUpdateMember}
+        onDeleteMember={handleDeleteMember}
       />
 
       {/* Global Command Palette (Ctrl/Cmd + K) */}

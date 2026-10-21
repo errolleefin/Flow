@@ -86,6 +86,20 @@ export const apiClient = {
       body: JSON.stringify(payload),
     }),
 
+  updateProject: (
+    projectId: string,
+    patch: Partial<{ name: string; code: string; color: string; description: string }>
+  ) =>
+    request<Project>(`/api/projects/${projectId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  deleteProject: (projectId: string) =>
+    request<{ ok: boolean }>(`/api/projects/${projectId}`, {
+      method: 'DELETE',
+    }),
+
   createMember: (payload: {
     name: string;
     role: string;
@@ -96,6 +110,26 @@ export const apiClient = {
     request<Member>('/api/members', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+
+  updateMember: (
+    memberId: string,
+    patch: Partial<{
+      name: string;
+      role: string;
+      avatar_bg: string;
+      email: string;
+      capacity_hours: number;
+    }>
+  ) =>
+    request<Member>(`/api/members/${memberId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  deleteMember: (memberId: string) =>
+    request<{ ok: boolean }>(`/api/members/${memberId}`, {
+      method: 'DELETE',
     }),
 
   resetDemoData: () =>

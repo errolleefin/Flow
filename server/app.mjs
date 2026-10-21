@@ -407,7 +407,52 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  // 8. Create team member
+  app.patch('/api/projects/:id', (req, res) => {
+    try {
+      const projId = req.params.id;
+      const existing = db.prepare('SELECT * FROM projects WHERE id = ?').get(projId);
+      if (!existing) {
+        return res.status(404).json({ error: '未找到该项目' });
+      }
+      const nextName =
+        req.body.name !== undefined ? String(req.body.name).trim() : existing.name;
+      const nextCode =
+        req.body.code !== undefined
+          ? String(req.body.code).trim().toUpperCase()
+          : existing.code;
+      const nextColor =
+        req.body.color !== undefined ? String(req.body.color).trim() : existing.color;
+      const nextDesc =
+        req.body.description !== undefined
+          ? String(req.body.description)
+          : existing.description;
+
+      if (!nextName) {
+        return res.status(400).json({ error: '项目名称不能为空' });
+      }
+
+      db.prepare(
+        'UPDATE projects SET name = ?, code = ?, color = ?, description = ? WHERE id = ?'
+      ).run(nextName, nextCode || 'PRJ', nextColor, nextDesc, projId);
+
+      const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(projId);
+      return res.json(updated);
+    } catch (err) {
+      return res.status(500).json({ error: String(err.message || err) });
+    }
+  });
+
+  app.delete('/api/projects/:id', (req, res) => {
+    try {
+      const projId = req.params.id;
+      db.prepare('DELETE FROM projects WHERE id = ?').run(projId);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ error: String(err.message || err) });
+    }
+  });
+
+  // 8. Create, update, or delete team member
   app.post('/api/members', (req, res) => {
     try {
       const {
@@ -433,6 +478,65 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         email,
         capacity_hours: Number(capacity_hours) || 40,
       });
+    } catch (err) {
+      return res.status(500).json({ error: String(err.message || err) });
+    }
+  });
+
+  app.patch('/api/members/:id', (req, res) => {
+    try {
+      const memId = req.params.id;
+      const existing = db.prepare('SELECT * FROM members WHERE id = ?').get(memId);
+      if (!existing) {
+        return res.status(404).json({ error: '未找到该成员' });
+      }
+      const nextName =
+        req.body.name !== undefined ? String(req.body.name).trim() : existing.name;
+      const nextRole =
+        req.body.role !== undefined ? String(req.body.role).trim() : existing.role;
+      const nextAvatarBg =
+        req.body.avatar_bg !== undefined
+          ? String(req.body.avatar_bg)
+          : existing.avatar_bg;
+      const nextEmail =
+        req.body.email !== undefined ? String(req.body.email).trim() : existing.email;
+      const nextCapacity =
+        req.body.capacity_hours !== undefined
+          ? Number(req.body.capacity_hours) || 40
+          : existing.capacity_hours;
+
+      if (!nextName) {
+        return res.status(400).json({ error: '成员姓名不能为空' });
+      }
+
+      db.prepare(
+        'UPDATE members SET name = ?, role = ?, avatar_bg = ?, email = ?, capacity_hours = ? WHERE id = ?'
+      ).run(nextName, nextRole, nextAvatarBg, nextEmail, nextCapacity, memId);
+
+      const updated = db.prepare('SELECT * FROM members WHERE id = ?').get(memId);
+      return res.json(updated);
+    } catch (err) {
+      return res.status(500).json({ error: String(err.message || err) });
+    }
+  });
+
+  app.delete('/api/members/:id', (req, res) => {
+    try {
+      const memId = req.params.id;
+      // Safely clear assignee_id on tasks assigned to this member
+      db.prepare('UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?').run(memId);
+      // Remove member ID from collaborator_ids JSON array on all tasks
+      const allTasks = db.prepare('SELECT id, collaborator_ids FROM tasks').all();
+      const updateCollab = db.prepare('UPDATE tasks SET collaborator_ids = ? WHERE id = ?');
+      for (const t of allTasks) {
+        const list = JSON.parse(t.collaborator_ids || '[]');
+        if (Array.isArray(list) && list.includes(memId)) {
+          const filtered = list.filter((id) => id !== memId);
+          updateCollab.run(JSON.stringify(filtered), t.id);
+        }
+      }
+      db.prepare('DELETE FROM members WHERE id = ?').run(memId);
+      return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
