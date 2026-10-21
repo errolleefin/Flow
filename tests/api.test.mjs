@@ -183,7 +183,7 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   assert.equal(comment.type, 'comment');
   assert.equal(comment.content, '接口响应速度非常快，已完成联调！');
 
-  // 7. Edit Project (PATCH /api/projects/:id)
+  // 7. Edit Project & Pin (PATCH /api/projects/:id)
   const editProjRes = await fetch(`${baseUrl}/api/projects/${secondProject.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -192,6 +192,7 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
       code: 'MOB',
       color: '#ec4899',
       description: '全新跨端渲染引擎',
+      pinned: true,
     }),
   });
   assert.equal(editProjRes.status, 200);
@@ -199,8 +200,9 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   assert.equal(editedProj.name, '移动端 4.0 架构');
   assert.equal(editedProj.code, 'MOB');
   assert.equal(editedProj.color, '#ec4899');
+  assert.equal(editedProj.pinned, true);
 
-  // 8. Edit Member (PATCH /api/members/:id)
+  // 8. Edit Member & Pin (PATCH /api/members/:id)
   const editMemRes = await fetch(`${baseUrl}/api/members/${targetCollab.id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -208,6 +210,7 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
       name: '李薇薇',
       role: '设计总监',
       capacity_hours: 32,
+      pinned: true,
     }),
   });
   assert.equal(editMemRes.status, 200);
@@ -215,6 +218,7 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   assert.equal(editedMem.name, '李薇薇');
   assert.equal(editedMem.role, '设计总监');
   assert.equal(editedMem.capacity_hours, 32);
+  assert.equal(editedMem.pinned, true);
 
   // 9. Delete Member (DELETE /api/members/:id) and verify tasks are unassigned safely without being deleted
   const delMemRes = await fetch(`${baseUrl}/api/members/${targetCollab.id}`, {

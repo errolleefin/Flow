@@ -868,19 +868,35 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         req.body.description !== undefined
           ? String(req.body.description)
           : existing.description;
+      const nextPinned =
+        req.body.pinned !== undefined
+          ? req.body.pinned
+            ? 1
+            : 0
+          : existing.pinned || 0;
 
       if (!nextName) {
         return res.status(400).json({ error: '项目名称不能为空' });
       }
 
       db.prepare(
-        'UPDATE projects SET name = ?, code = ?, color = ?, description = ? WHERE id = ?'
-      ).run(nextName, nextCode || 'PRJ', nextColor, nextDesc, projId);
+        'UPDATE projects SET name = ?, code = ?, color = ?, description = ?, pinned = ? WHERE id = ?'
+      ).run(
+        nextName,
+        nextCode || 'PRJ',
+        nextColor,
+        nextDesc,
+        nextPinned,
+        projId
+      );
 
       const updated = db
         .prepare('SELECT * FROM projects WHERE id = ?')
         .get(projId);
-      return res.json(updated);
+      return res.json({
+        ...updated,
+        pinned: Boolean(updated.pinned),
+      });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
@@ -966,19 +982,36 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         req.body.capacity_hours !== undefined
           ? Number(req.body.capacity_hours) || 40
           : existing.capacity_hours;
+      const nextPinned =
+        req.body.pinned !== undefined
+          ? req.body.pinned
+            ? 1
+            : 0
+          : existing.pinned || 0;
 
       if (!nextName) {
         return res.status(400).json({ error: '成员姓名不能为空' });
       }
 
       db.prepare(
-        'UPDATE members SET name = ?, role = ?, avatar_bg = ?, email = ?, capacity_hours = ? WHERE id = ?'
-      ).run(nextName, nextRole, nextAvatarBg, nextEmail, nextCapacity, memId);
+        'UPDATE members SET name = ?, role = ?, avatar_bg = ?, email = ?, capacity_hours = ?, pinned = ? WHERE id = ?'
+      ).run(
+        nextName,
+        nextRole,
+        nextAvatarBg,
+        nextEmail,
+        nextCapacity,
+        nextPinned,
+        memId
+      );
 
       const updated = db
         .prepare('SELECT * FROM members WHERE id = ?')
         .get(memId);
-      return res.json(updated);
+      return res.json({
+        ...updated,
+        pinned: Boolean(updated.pinned),
+      });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }

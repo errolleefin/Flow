@@ -182,6 +182,7 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
       code TEXT NOT NULL,
       color TEXT NOT NULL,
       description TEXT DEFAULT '',
+      pinned INTEGER DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -191,7 +192,8 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
       role TEXT NOT NULL,
       avatar_bg TEXT NOT NULL,
       email TEXT DEFAULT '',
-      capacity_hours INTEGER DEFAULT 40
+      capacity_hours INTEGER DEFAULT 40,
+      pinned INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
@@ -293,10 +295,18 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
     );
   `);
 
-  // Safe migration for existing databases missing subtasks.completed_at
+  // Safe migration for existing databases missing subtasks.completed_at or pinned columns
   const subCols = db.prepare('PRAGMA table_info(subtasks)').all();
   if (!subCols.some((c) => c.name === 'completed_at')) {
     db.exec('ALTER TABLE subtasks ADD COLUMN completed_at TEXT DEFAULT NULL;');
+  }
+  const projCols = db.prepare('PRAGMA table_info(projects)').all();
+  if (!projCols.some((c) => c.name === 'pinned')) {
+    db.exec('ALTER TABLE projects ADD COLUMN pinned INTEGER DEFAULT 0;');
+  }
+  const memCols = db.prepare('PRAGMA table_info(members)').all();
+  if (!memCols.some((c) => c.name === 'pinned')) {
+    db.exec('ALTER TABLE members ADD COLUMN pinned INTEGER DEFAULT 0;');
   }
 
   const aiRow = db.prepare('SELECT id FROM ai_settings WHERE id = 1').get();
@@ -395,8 +405,12 @@ export function getChatGroups(db, visibleProjectIds = 'all') {
 
 export function getBootstrapData(db, visibleProjectIds = 'all') {
   const allProjects = db
-    .prepare('SELECT * FROM projects ORDER BY created_at ASC')
-    .all();
+    .prepare('SELECT * FROM projects ORDER BY pinned DESC, created_at ASC')
+    .all()
+    .map((p) => ({
+      ...p,
+      pinned: Boolean(p.pinned),
+    }));
   const projects =
     visibleProjectIds === 'all' || !Array.isArray(visibleProjectIds)
       ? allProjects
@@ -404,7 +418,13 @@ export function getBootstrapData(db, visibleProjectIds = 'all') {
 
   const allowedProjSet = new Set(projects.map((p) => p.id));
 
-  const members = db.prepare('SELECT * FROM members ORDER BY rowid ASC').all();
+  const members = db
+    .prepare('SELECT * FROM members ORDER BY pinned DESC, rowid ASC')
+    .all()
+    .map((m) => ({
+      ...m,
+      pinned: Boolean(m.pinned),
+    }));
   const taskRows = db
     .prepare('SELECT * FROM tasks ORDER BY position ASC, created_at DESC')
     .all()

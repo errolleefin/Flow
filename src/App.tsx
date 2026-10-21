@@ -553,6 +553,62 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleTogglePinProject = async (project: Project) => {
+    const nextPinned = !project.pinned;
+    setProjects((prev) =>
+      prev.map((p) => (p.id === project.id ? { ...p, pinned: nextPinned } : p))
+    );
+    try {
+      const updated = await apiClient.updateProject(project.id, {
+        pinned: nextPinned,
+      });
+      setProjects((prev) =>
+        prev.map((p) => (p.id === project.id ? updated : p))
+      );
+      showToast(
+        nextPinned
+          ? tr(`已置顶项目「${project.name}」`, `Pinned project "${project.name}"`)
+          : tr(`已取消置顶「${project.name}」`, `Unpinned "${project.name}"`)
+      );
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('置顶状态更新失败', 'Failed to update pin status'),
+        'error'
+      );
+      loadBootstrap();
+    }
+  };
+
+  const handleTogglePinMember = async (member: Member) => {
+    const nextPinned = !member.pinned;
+    setMembers((prev) =>
+      prev.map((m) => (m.id === member.id ? { ...m, pinned: nextPinned } : m))
+    );
+    try {
+      const updated = await apiClient.updateMember(member.id, {
+        pinned: nextPinned,
+      });
+      setMembers((prev) =>
+        prev.map((m) => (m.id === member.id ? updated : m))
+      );
+      showToast(
+        nextPinned
+          ? tr(`已置顶成员「${member.name}」`, `Pinned member "${member.name}"`)
+          : tr(`已取消置顶「${member.name}」`, `Unpinned "${member.name}"`)
+      );
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('置顶状态更新失败', 'Failed to update pin status'),
+        'error'
+      );
+      loadBootstrap();
+    }
+  };
+
   // Export & Import Handlers
   const handleExportJSON = () => {
     const blob = new Blob(
@@ -680,10 +736,6 @@ export const App: React.FC = () => {
     );
   }
 
-  const canManageAccounts =
-    currentUser.role === 'admin' ||
-    Boolean(currentUser.permissions.can_manage_accounts);
-
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-[#090D16] text-slate-900 dark:text-slate-100">
       {/* Left Navigation Sidebar */}
@@ -693,7 +745,6 @@ export const App: React.FC = () => {
         projects={projects}
         members={members}
         tasks={tasks}
-        chatGroups={chatGroups}
         currentUser={currentUser}
         filters={filters}
         onUpdateFilter={(patch) =>
@@ -708,6 +759,7 @@ export const App: React.FC = () => {
           setModalMode('project');
         }}
         onDeleteProject={handleDeleteProject}
+        onTogglePinProject={handleTogglePinProject}
         onOpenNewMember={() => {
           setEditingMember(null);
           setModalMode('member');
@@ -717,10 +769,7 @@ export const App: React.FC = () => {
           setModalMode('member');
         }}
         onDeleteMember={handleDeleteMember}
-        onOpenChatDrawer={(groupId) => {
-          if (groupId) setActiveChatGroupId(groupId);
-          setChatDrawerOpen(true);
-        }}
+        onTogglePinMember={handleTogglePinMember}
         onOpenAccountModal={() => setAccountModalOpen(true)}
         onLogout={handleLogout}
       />
@@ -737,7 +786,6 @@ export const App: React.FC = () => {
           totalTaskCount={tasks.length}
           chatGroupCount={chatGroups.length}
           canCreateTask={currentUser.permissions.can_create_task}
-          canManageAccounts={canManageAccounts}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode((prev) => !prev)}
           onUpdateFilter={(patch) =>
@@ -750,8 +798,10 @@ export const App: React.FC = () => {
           }}
           onOpenCommandPalette={() => setCommandOpen(true)}
           onOpenAiAssistant={() => setAiDrawerOpen(true)}
-          onOpenChatDrawer={() => setChatDrawerOpen(true)}
-          onOpenAccountModal={() => setAccountModalOpen(true)}
+          onOpenChatDrawer={() => {
+            setActiveChatGroupId(null);
+            setChatDrawerOpen(true);
+          }}
           onExportJSON={handleExportJSON}
           onExportCSV={handleExportCSV}
           onImportJSON={handleImportJSON}

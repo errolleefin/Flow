@@ -183,7 +183,13 @@ export const apiClient = {
 
   updateProject: (
     projectId: string,
-    patch: Partial<{ name: string; code: string; color: string; description: string }>
+    patch: Partial<{
+      name: string;
+      code: string;
+      color: string;
+      description: string;
+      pinned: boolean;
+    }>
   ) =>
     request<Project>(`/api/projects/${projectId}`, {
       method: 'PATCH',
@@ -216,6 +222,7 @@ export const apiClient = {
       avatar_bg: string;
       email: string;
       capacity_hours: number;
+      pinned: boolean;
     }>
   ) =>
     request<Member>(`/api/members/${memberId}`, {

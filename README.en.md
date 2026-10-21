@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/SQLite-Native%20node%3Asqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Vercel%20%2B%20Supabase-Supported-000000?logo=vercel&logoColor=white" alt="Vercel" />
-  <img src="https://img.shields.io/badge/Release-v0.1-6366F1" alt="Release v0.1" />
+  <img src="https://img.shields.io/badge/Release-v0.2-6366F1" alt="Release v0.2" />
   <img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License GPL-3.0" />
 </p>
 
@@ -41,7 +41,7 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 
 ### 3. Account Authentication & 5-Tier RBAC System
 - **First-Time Super Admin Setup**: When deployed with an empty user table, Flow automatically launches the **First-Time Super Admin Setup** wizard to initialize the primary `admin` account and optionally create a bound team member profile.
-- **Account Management Menu**: Super Admins can access the **Account & RBAC Management** modal from the bottom of the left sidebar or the top header to create, edit, and delete user accounts, reset passwords, and configure permissions.
+- **Account Management Menu**: Super Admins can access the **Account Management** modal from the bottom of the left sidebar to create, edit, and delete user accounts, reset passwords, and configure permissions.
 - **5-Tier Organization Role Hierarchy & Granular Overrides**: Includes 5 built-in role presets with customizable per-account permission toggles and **project visibility scoping (`All Projects` vs. `Selected Projects Only`)**:
 
 | Role Tier | Default Project Visibility | Project Create / Edit / Delete | Task Create / Edit / Delete | Manage Team Members | Manage Accounts & RBAC |
@@ -55,10 +55,12 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 - **Two-Way Team Member Binding**: Bind any login account directly to an existing team member name on the board (`member_id`), or auto-create a matching team member profile. Bound accounts automatically post task comments and group chat messages under their bound member identity.
 
 ### 4. Custom Project Communication Group Chats
-- **Multi-Channel Project Group Chats**: Open the Group Chat drawer from the sidebar or top header to create, edit, and delete custom communication channels (either linked to a specific project or configured as a cross-project channel with custom participant lists).
+- **Multi-Channel Project Group Chats**: Open the **Group Chat** drawer from the top header toolbar to create, edit, and delete custom communication channels (either linked to a specific project or configured as a cross-project channel with custom participant lists).
 - **Interactive `@Member` & `#TASK-KEY` References**: Quick-insert `@member` mentions and `#TASK-KEY` task badges into messages. Clicking any `#TASK-KEY` chip in the message stream opens that task's detail drawer immediately.
 
 ### 5. Developer-Grade UI/UX & Productivity Tooling
+- **Streamlined Sidebar with Collapsible Sections, Top-5 View & Pinning**: Clean single-line sidebar navigation where both Projects and Team Members sections support **click-to-collapse/expand**, **showing the top 5 items by default with a one-click "Show All" toggle**, and **pinning (`Pin`) individual projects or members** to the top.
+- **Right-Aligned Top Action Toolbar**: All workspace utility and action buttons starting from Export (`JSON` / `CSV`), Import, Clear Workspace, Language Toggle (`中 / EN`), Theme Toggle, Group Chat, AI Assistant, and New Task are cleanly right-aligned at the top of the page with zero duplicate menus between sidebar and header.
 - **Subtask Completion Timestamps**: Checking off a subtask in the task detail drawer automatically records the completion time (`completed_at`) and displays the formatted timestamp on the right side of the subtask row.
 - **Full Lifecycle Management for Projects & Personnel**: Create, edit, and delete projects and team members directly from the sidebar or board column headers. Deleting a member safely unassigns their tasks without data loss.
 - **Keyboard-First Navigation**: Press `Ctrl/Cmd + K` for the global Command Palette, `N` for quick task creation, `Ctrl/Cmd + J` to toggle the AI Assistant, and `Esc` to dismiss active drawers or modals.

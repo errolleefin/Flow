@@ -44,6 +44,7 @@ export interface Project {
   code: string;
   color: string;
   description: string;
+  pinned?: boolean;
   created_at: string;
 }
 
@@ -54,6 +55,7 @@ export interface Member {
   avatar_bg: string;
   email: string;
   capacity_hours: number;
+  pinned?: boolean;
 }
 
 export interface Subtask {

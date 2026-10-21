@@ -1,24 +1,23 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart3,
   CalendarClock,
+  ChevronDown,
+  ChevronRight,
   FolderKanban,
-  Hash,
   Kanban,
   Layers,
   LogOut,
-  MessageSquare,
   Pencil,
+  Pin,
   Plus,
   ShieldCheck,
   Trash2,
   Users,
-  AlertTriangle,
 } from 'lucide-react';
 import type {
   AccountRole,
   BoardViewType,
-  ChatGroup,
   FilterState,
   Member,
   Project,
@@ -35,17 +34,17 @@ interface SidebarProps {
   projects: Project[];
   members: Member[];
   tasks: Task[];
-  chatGroups: ChatGroup[];
   currentUser: UserAccount | null;
   filters: FilterState;
   onUpdateFilter: (patch: Partial<FilterState>) => void;
   onOpenNewProject: () => void;
   onEditProject: (project: Project) => void;
   onDeleteProject: (project: Project) => void;
+  onTogglePinProject: (project: Project) => void;
   onOpenNewMember: () => void;
   onEditMember: (member: Member) => void;
   onDeleteMember: (member: Member) => void;
-  onOpenChatDrawer: (groupId?: string) => void;
+  onTogglePinMember: (member: Member) => void;
   onOpenAccountModal: () => void;
   onLogout: () => void;
 }
@@ -137,27 +136,36 @@ const ROLE_LABELS: Record<
   },
 };
 
+const COLLAPSED_LIMIT = 5;
+
 export const Sidebar: React.FC<SidebarProps> = ({
   activeView,
   onSelectView,
   projects,
   members,
   tasks,
-  chatGroups,
   currentUser,
   filters,
   onUpdateFilter,
   onOpenNewProject,
   onEditProject,
   onDeleteProject,
+  onTogglePinProject,
   onOpenNewMember,
   onEditMember,
   onDeleteMember,
-  onOpenChatDrawer,
+  onTogglePinMember,
   onOpenAccountModal,
   onLogout,
 }) => {
   const { tr } = useI18n();
+
+  const [projectsOpen, setProjectsOpen] = useState(true);
+  const [showAllProjects, setShowAllProjects] = useState(false);
+
+  const [membersOpen, setMembersOpen] = useState(true);
+  const [showAllMembers, setShowAllMembers] = useState(false);
+
   const overdueCount = tasks.filter(
     (t) => getDueStatus(t.due_date, t.status) === 'overdue'
   ).length;
@@ -174,43 +182,65 @@ export const Sidebar: React.FC<SidebarProps> = ({
     currentUser?.role === 'admin' ||
     Boolean(currentUser?.permissions.can_manage_accounts);
 
-  const projectMap = new Map(projects.map((p) => [p.id, p]));
+  // Sort pinned projects to the top
+  const sortedProjects = useMemo(() => {
+    return [...projects].sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+        return a.pinned ? -1 : 1;
+      }
+      return 0;
+    });
+  }, [projects]);
+
+  const visibleProjects = showAllProjects
+    ? sortedProjects
+    : sortedProjects.slice(0, COLLAPSED_LIMIT);
+
+  // Sort pinned members to the top
+  const sortedMembers = useMemo(() => {
+    return [...members].sort((a, b) => {
+      if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+        return a.pinned ? -1 : 1;
+      }
+      return 0;
+    });
+  }, [members]);
+
+  const visibleMembers = showAllMembers
+    ? sortedMembers
+    : sortedMembers.slice(0, COLLAPSED_LIMIT);
+
   const boundMember = currentUser?.member_id
     ? members.find((m) => m.id === currentUser.member_id)
     : null;
 
   return (
-    <aside className="w-64 shrink-0 h-screen border-r border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-[#0E131F] flex flex-col select-none">
+    <aside className="w-60 shrink-0 h-screen border-r border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#0D121D] flex flex-col select-none">
       {/* Brand Header */}
-      <div className="px-4 py-4 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between">
+      <div className="px-4 py-3.5 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <FlowLogo className="w-8 h-8 shrink-0 shadow-md shadow-indigo-500/20 rounded-xl" />
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white">
-                Flow
-              </span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
-                v0.1
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              {tr('多维协同 Todo 与看板中枢', 'Multi-Board Work Todo & Kanban')}
-            </p>
+          <FlowLogo className="w-7 h-7 shrink-0 shadow-sm shadow-indigo-500/20 rounded-xl" />
+          <div className="flex items-center gap-1.5">
+            <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white">
+              Flow
+            </span>
+            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+              v0.2
+            </span>
           </div>
         </div>
       </div>
 
       {/* Scrollable Navigation Sections */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
-        {/* 1. Five Board Views */}
+      <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4">
+        {/* 1. Five Board Views (Clean Single-Line Navigation) */}
         <div>
-          <div className="px-2 mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {tr('多维看板视图 (5)', 'Board Views (5)')}
+          <div className="px-2 mb-1 flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {tr('视图导航', 'Views')}
             </span>
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {BOARD_VIEWS.map((view) => {
               const Icon = view.icon;
               const isActive = activeView === view.id;
@@ -219,36 +249,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   key={view.id}
                   type="button"
                   onClick={() => onSelectView(view.id)}
-                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-all ${
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/25'
+                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Icon
-                      className={`w-4 h-4 shrink-0 ${
+                      className={`w-3.5 h-3.5 shrink-0 ${
                         isActive ? 'text-white' : view.badgeColor
                       }`}
                     />
-                    <div className="truncate">
-                      <div className="text-xs font-semibold leading-tight">
-                        {tr(view.label, view.labelEn)}
-                      </div>
-                      <div
-                        className={`text-[10px] truncate ${
-                          isActive
-                            ? 'text-indigo-100'
-                            : 'text-slate-400 dark:text-slate-500'
-                        }`}
-                      >
-                        {tr(view.shortDesc, view.shortDescEn)}
-                      </div>
-                    </div>
+                    <span className="truncate">
+                      {tr(view.label, view.labelEn)}
+                    </span>
                   </div>
                   {view.id === 'duedate' && overdueCount > 0 && (
                     <span
-                      className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full ${
+                      className={`px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full ${
                         isActive
                           ? 'bg-white/20 text-white'
                           : 'bg-rose-500/15 text-rose-500'
@@ -267,37 +286,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
         </div>
 
-        {/* Quick Overdue Alert Filter */}
-        {overdueCount > 0 && (
-          <div className="px-1">
+        {/* 2. Collapsible Projects Section (Top 5 + Show All + Pin) */}
+        <div className="border-t border-slate-200/60 dark:border-slate-800/60 pt-3">
+          <div className="px-1.5 mb-1 flex items-center justify-between">
             <button
               type="button"
-              onClick={() =>
-                onUpdateFilter({ onlyOverdue: !filters.onlyOverdue })
-              }
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
-                filters.onlyOverdue
-                  ? 'bg-rose-500 text-white border-rose-500 shadow-sm'
-                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25 hover:bg-rose-500/20'
-              }`}
+              onClick={() => setProjectsOpen((prev) => !prev)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
             >
-              <span className="flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                {tr('逾期死线预警', 'Overdue Alerts')}
-              </span>
-              <span className="font-mono font-bold">
-                {tr(`${overdueCount} 项`, `${overdueCount}`)}
+              {projectsOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              )}
+              <span>
+                {tr(
+                  `项目 (${projects.length})`,
+                  `Projects (${projects.length})`
+                )}
               </span>
             </button>
-          </div>
-        )}
-
-        {/* 2. Projects Section */}
-        <div>
-          <div className="px-2 mb-1.5 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {tr(`项目列表 (${projects.length})`, `Projects (${projects.length})`)}
-            </span>
             {canCreateProject && (
               <button
                 type="button"
@@ -309,68 +317,85 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
           </div>
-          <div className="space-y-0.5">
-            <button
-              type="button"
-              onClick={() => onUpdateFilter({ projectId: 'all' })}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                filters.projectId === 'all'
-                  ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <Layers className="w-3.5 h-3.5 text-slate-400" />
-                {tr('全部项目', 'All Projects')}
-              </span>
-              <span className="font-mono text-[11px] text-slate-400">
-                {tasks.length}
-              </span>
-            </button>
 
-            {projects.map((proj) => {
-              const count = tasks.filter((t) => t.project_id === proj.id).length;
-              const doneCount = tasks.filter(
-                (t) => t.project_id === proj.id && t.status === 'done'
-              ).length;
-              const isSelected = filters.projectId === proj.id;
+          {projectsOpen && (
+            <div className="space-y-0.5">
+              <button
+                type="button"
+                onClick={() => onUpdateFilter({ projectId: 'all' })}
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                  filters.projectId === 'all'
+                    ? 'bg-slate-100 dark:bg-slate-800/90 text-indigo-600 dark:text-indigo-400 font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Layers className="w-3.5 h-3.5 text-slate-400" />
+                  {tr('全部项目', 'All Projects')}
+                </span>
+                <span className="font-mono text-[10px] text-slate-400">
+                  {tasks.length}
+                </span>
+              </button>
 
-              return (
-                <div
-                  key={proj.id}
-                  className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                    isSelected
-                      ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onUpdateFilter({
-                        projectId: isSelected ? 'all' : proj.id,
-                      })
-                    }
-                    className="flex-1 flex items-center gap-2 min-w-0 text-left"
+              {visibleProjects.map((proj) => {
+                const count = tasks.filter(
+                  (t) => t.project_id === proj.id
+                ).length;
+                const isSelected = filters.projectId === proj.id;
+
+                return (
+                  <div
+                    key={proj.id}
+                    className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                      isSelected
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-indigo-600 dark:text-indigo-400 font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
+                    }`}
                   >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: proj.color }}
-                    />
-                    <span className="truncate">{proj.name}</span>
-                  </button>
-                  <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                    <span
-                      className={`font-mono text-[10px] text-slate-400 ${
-                        canEditProject || canDeleteProject
-                          ? 'group-hover:hidden'
-                          : ''
-                      }`}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateFilter({
+                          projectId: isSelected ? 'all' : proj.id,
+                        })
+                      }
+                      className="flex-1 flex items-center gap-2 min-w-0 text-left"
                     >
-                      {doneCount}/{count}
-                    </span>
-                    {(canEditProject || canDeleteProject) && (
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: proj.color }}
+                      />
+                      <span className="truncate">{proj.name}</span>
+                      {proj.pinned && (
+                        <Pin className="w-2.5 h-2.5 text-indigo-500 fill-indigo-500/30 shrink-0" />
+                      )}
+                    </button>
+
+                    <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                      <span className="font-mono text-[10px] text-slate-400 group-hover:hidden">
+                        {count}
+                      </span>
                       <div className="hidden group-hover:flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onTogglePinProject(proj);
+                          }}
+                          className={`p-1 rounded transition-colors ${
+                            proj.pinned
+                              ? 'text-indigo-500 bg-indigo-500/10'
+                              : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                          }`}
+                          title={
+                            proj.pinned
+                              ? tr('取消置顶', 'Unpin Project')
+                              : tr('置顶项目', 'Pin Project')
+                          }
+                        >
+                          <Pin className="w-3 h-3" />
+                        </button>
                         {canEditProject && (
                           <button
                             type="button"
@@ -398,83 +423,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           </button>
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+
+              {sortedProjects.length > COLLAPSED_LIMIT && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllProjects((prev) => !prev)}
+                  className="w-full px-2.5 py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 rounded-lg text-left transition-colors"
+                >
+                  {showAllProjects
+                    ? tr('收起（仅显示前 5 项）', 'Show top 5')
+                    : tr(
+                        `展示全部 (${sortedProjects.length})`,
+                        `Show all (${sortedProjects.length})`
+                      )}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* 3. Custom Project Communication Group Chats */}
-        <div>
-          <div className="px-2 mb-1.5 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {tr(
-                `项目沟通群聊 (${chatGroups.length})`,
-                `Group Chats (${chatGroups.length})`
-              )}
-            </span>
+        {/* 3. Collapsible Team Members Section (Top 5 + Show All + Pin) */}
+        <div className="border-t border-slate-200/60 dark:border-slate-800/60 pt-3">
+          <div className="px-1.5 mb-1 flex items-center justify-between">
             <button
               type="button"
-              onClick={() => onOpenChatDrawer()}
-              className="p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title={tr('打开或新建项目沟通群聊', 'Open or create group chat')}
+              onClick={() => setMembersOpen((prev) => !prev)}
+              className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
+              {membersOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              )}
+              <span>
+                {tr(
+                  `相关人员 (${members.length})`,
+                  `Members (${members.length})`
+                )}
+              </span>
             </button>
-          </div>
-          <div className="space-y-0.5">
-            {chatGroups.length === 0 ? (
-              <button
-                type="button"
-                onClick={() => onOpenChatDrawer()}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-800 transition-colors"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                <span className="truncate">
-                  {tr('+ 新建自定义项目沟通群', '+ Create project chat group')}
-                </span>
-              </button>
-            ) : (
-              chatGroups.map((group) => {
-                const linkedProj = group.project_id
-                  ? projectMap.get(group.project_id)
-                  : null;
-                return (
-                  <button
-                    key={group.id}
-                    type="button"
-                    onClick={() => onOpenChatDrawer(group.id)}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100/70 dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Hash className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                      <span className="truncate">{group.name}</span>
-                      {linkedProj && (
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: linkedProj.color }}
-                          title={linkedProj.name}
-                        />
-                      )}
-                    </div>
-                    <span className="font-mono text-[10px] text-slate-400">
-                      {group.message_count || 0}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* 4. Team Personnel Section */}
-        <div>
-          <div className="px-2 mb-1.5 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {tr(`相关人员 (${members.length})`, `Team Members (${members.length})`)}
-            </span>
             {canManageMembers && (
               <button
                 type="button"
@@ -486,95 +477,126 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
           </div>
-          <div className="space-y-0.5">
-            {members.map((mem) => {
-              const activeCount = tasks.filter(
-                (t) =>
-                  t.status !== 'done' &&
-                  (t.assignee_id === mem.id ||
-                    t.collaborator_ids.includes(mem.id))
-              ).length;
-              const isSelected = filters.memberId === mem.id;
 
-              return (
-                <div
-                  key={mem.id}
-                  className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                    isSelected
-                      ? 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onUpdateFilter({
-                        memberId: isSelected ? 'all' : mem.id,
-                      })
-                    }
-                    className="flex-1 flex items-center gap-2 min-w-0 text-left"
+          {membersOpen && (
+            <div className="space-y-0.5">
+              {visibleMembers.map((mem) => {
+                const activeCount = tasks.filter(
+                  (t) =>
+                    t.status !== 'done' &&
+                    (t.assignee_id === mem.id ||
+                      t.collaborator_ids.includes(mem.id))
+                ).length;
+                const isSelected = filters.memberId === mem.id;
+
+                return (
+                  <div
+                    key={mem.id}
+                    className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                      isSelected
+                        ? 'bg-slate-100 dark:bg-slate-800/90 text-indigo-600 dark:text-indigo-400 font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
+                    }`}
                   >
-                    <span
-                      className={`w-5 h-5 rounded-full bg-gradient-to-br ${mem.avatar_bg} text-white text-[10px] font-bold flex items-center justify-center shrink-0`}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateFilter({
+                          memberId: isSelected ? 'all' : mem.id,
+                        })
+                      }
+                      className="flex-1 flex items-center gap-2 min-w-0 text-left"
                     >
-                      {mem.name.slice(0, 1)}
-                    </span>
-                    <div className="truncate text-left">
-                      <span className="truncate block leading-tight">
-                        {mem.name}
+                      <span
+                        className={`w-4 h-4 rounded-full bg-gradient-to-br ${mem.avatar_bg} text-white text-[9px] font-bold flex items-center justify-center shrink-0`}
+                      >
+                        {mem.name.slice(0, 1)}
                       </span>
-                      <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate block">
-                        {mem.role}
+                      <span className="truncate">{mem.name}</span>
+                      {mem.pinned && (
+                        <Pin className="w-2.5 h-2.5 text-indigo-500 fill-indigo-500/30 shrink-0" />
+                      )}
+                    </button>
+
+                    <div className="flex items-center gap-0.5 shrink-0 ml-1">
+                      <span className="font-mono text-[10px] text-slate-400 group-hover:hidden">
+                        {activeCount}
                       </span>
-                    </div>
-                  </button>
-                  <div className="flex items-center gap-0.5 shrink-0 ml-1">
-                    <span
-                      className={`px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-slate-500 ${
-                        canManageMembers ? 'group-hover:hidden' : ''
-                      }`}
-                      title={tr('进行中关联任务数', 'Active related tasks')}
-                    >
-                      {activeCount}
-                    </span>
-                    {canManageMembers && (
                       <div className="hidden group-hover:flex items-center gap-0.5">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onEditMember(mem);
+                            onTogglePinMember(mem);
                           }}
-                          className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                          title={tr('编辑成员', 'Edit Member')}
+                          className={`p-1 rounded transition-colors ${
+                            mem.pinned
+                              ? 'text-indigo-500 bg-indigo-500/10'
+                              : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                          }`}
+                          title={
+                            mem.pinned
+                              ? tr('取消置顶', 'Unpin Member')
+                              : tr('置顶人员', 'Pin Member')
+                          }
                         >
-                          <Pencil className="w-3 h-3" />
+                          <Pin className="w-3 h-3" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteMember(mem);
-                          }}
-                          className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                          title={tr('删除成员', 'Delete Member')}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        {canManageMembers && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEditMember(mem);
+                              }}
+                              className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                              title={tr('编辑成员', 'Edit Member')}
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteMember(mem);
+                              }}
+                              className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                              title={tr('删除成员', 'Delete Member')}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+
+              {sortedMembers.length > COLLAPSED_LIMIT && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllMembers((prev) => !prev)}
+                  className="w-full px-2.5 py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 rounded-lg text-left transition-colors"
+                >
+                  {showAllMembers
+                    ? tr('收起（仅显示前 5 项）', 'Show top 5')
+                    : tr(
+                        `展示全部 (${sortedMembers.length})`,
+                        `Show all (${sortedMembers.length})`
+                      )}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Footer: Current User Account + Admin Account Management Menu + Shortcuts */}
-      <div className="p-3 border-t border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-[#0B0F17]/70 space-y-2">
+      {/* Footer: Account Management Menu (Left Sidebar Only) + Current User Card */}
+      <div className="p-2.5 border-t border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-[#0B0F17]/70 space-y-1.5">
         {currentUser && (
-          <div className="space-y-1.5">
+          <>
             {canManageAccounts && (
               <button
                 type="button"
@@ -583,7 +605,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <span className="flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  {tr('账号与权限管理', 'Account & RBAC')}
+                  {tr('账号管理', 'Account Management')}
                 </span>
                 <span className="text-[10px] font-mono opacity-80">RBAC</span>
               </button>
@@ -626,20 +648,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
-          </div>
+          </>
         )}
-
-        <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">
-          <span>{tr('快捷键导航', 'Shortcuts')}</span>
-          <div className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px]">
-              Ctrl+K
-            </kbd>
-            <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px]">
-              N
-            </kbd>
-          </div>
-        </div>
       </div>
     </aside>
   );

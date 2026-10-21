@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS projects (
   code TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#6366f1',
   description TEXT DEFAULT '',
+  pinned BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -16,7 +17,8 @@ CREATE TABLE IF NOT EXISTS members (
   role TEXT NOT NULL DEFAULT '团队成员',
   avatar_bg TEXT NOT NULL DEFAULT 'from-indigo-500 to-purple-600',
   email TEXT DEFAULT '',
-  capacity_hours INTEGER NOT NULL DEFAULT 40
+  capacity_hours INTEGER NOT NULL DEFAULT 40,
+  pinned BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
