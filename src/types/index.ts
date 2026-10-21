@@ -107,6 +107,9 @@ export interface ChatGroup {
   created_at: string;
   message_count?: number;
   last_message_at?: string | null;
+  last_message_id?: string | null;
+  last_message_sender?: string | null;
+  last_message_content?: string | null;
 }
 
 export interface ChatGroupMessage {

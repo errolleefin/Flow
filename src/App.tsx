@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BellOff, Hash, MessageSquare, X } from 'lucide-react';
 import { apiClient, setAuthToken } from './api/client';
 import { AIAssistantDrawer } from './components/AIAssistantDrawer';
 import { AccountManagementModal } from './components/AccountManagementModal';
@@ -37,6 +38,17 @@ const INITIAL_FILTERS: FilterState = {
   includeCollaborated: true,
 };
 
+const MUTED_CHAT_GROUPS_STORAGE_KEY = 'flow-muted-chat-groups';
+
+interface ChatPopupNotification {
+  id: string;
+  groupId: string;
+  groupName: string;
+  projectColor: string;
+  senderName: string;
+  content: string;
+}
+
 export const App: React.FC = () => {
   const { tr } = useI18n();
   const [authChecking, setAuthChecking] = useState<boolean>(true);
@@ -47,6 +59,24 @@ export const App: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
+  const [mutedGroupIds, setMutedGroupIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(MUTED_CHAT_GROUPS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return [];
+  });
+  const [chatNotifications, setChatNotifications] = useState<
+    ChatPopupNotification[]
+  >([]);
+  const lastSeenMsgByGroupRef = useRef<Record<string, string | null>>({});
+  const seenInitializedRef = useRef<boolean>(false);
+
   const [loading, setLoading] = useState<boolean>(true);
   const [toast, setToast] = useState<{
     message: string;
@@ -86,6 +116,70 @@ export const App: React.FC = () => {
     []
   );
 
+  // Persist muted group IDs
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        MUTED_CHAT_GROUPS_STORAGE_KEY,
+        JSON.stringify(mutedGroupIds)
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [mutedGroupIds]);
+
+  const enqueueChatNotification = useCallback(
+    (notif: Omit<ChatPopupNotification, 'id'> & { messageId?: string }) => {
+      if (mutedGroupIds.includes(notif.groupId)) return;
+      const id =
+        notif.messageId ||
+        `${notif.groupId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setChatNotifications((prev) => {
+        if (prev.some((item) => item.id === id)) return prev;
+        return [{ ...notif, id }, ...prev].slice(0, 4);
+      });
+      window.setTimeout(() => {
+        setChatNotifications((prev) => prev.filter((item) => item.id !== id));
+      }, 6500);
+    },
+    [mutedGroupIds]
+  );
+
+  const handleToggleMuteGroup = useCallback(
+    (groupId: string) => {
+      const grp = chatGroups.find((g) => g.id === groupId);
+      setMutedGroupIds((prev) => {
+        const isMuted = prev.includes(groupId);
+        if (!isMuted) {
+          // Dismiss any active popups from this muted group immediately
+          setChatNotifications((curr) =>
+            curr.filter((item) => item.groupId !== groupId)
+          );
+          if (grp) {
+            showToast(
+              tr(
+                `已静音群聊「#${grp.name}」，不再弹出右下角新消息提醒`,
+                `Muted "#${grp.name}" — popup notifications disabled`
+              )
+            );
+          }
+          return [...prev, groupId];
+        } else {
+          if (grp) {
+            showToast(
+              tr(
+                `已恢复群聊「#${grp.name}」新消息提醒`,
+                `Unmuted "#${grp.name}" — popup notifications enabled`
+              )
+            );
+          }
+          return prev.filter((id) => id !== groupId);
+        }
+      });
+    },
+    [chatGroups, showToast, tr]
+  );
+
   // Sync dark mode class on <html>
   useEffect(() => {
     const root = document.documentElement;
@@ -108,6 +202,12 @@ export const App: React.FC = () => {
       setTasks(data.tasks);
       if (data.chatGroups) {
         setChatGroups(data.chatGroups);
+        const map: Record<string, string | null> = {};
+        for (const grp of data.chatGroups) {
+          map[grp.id] = grp.last_message_id ?? null;
+        }
+        lastSeenMsgByGroupRef.current = map;
+        seenInitializedRef.current = true;
       }
       if (data.currentUser) {
         setCurrentUser(data.currentUser);
@@ -123,6 +223,51 @@ export const App: React.FC = () => {
       setLoading(false);
     }
   }, [showToast, tr]);
+
+  // Background poll for new group chat messages -> Bottom-right popup notification
+  useEffect(() => {
+    if (!currentUser) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await apiClient.getChatGroups();
+        const groups = res.groups || [];
+        setChatGroups(groups);
+
+        if (!seenInitializedRef.current) {
+          const initMap: Record<string, string | null> = {};
+          for (const g of groups) {
+            initMap[g.id] = g.last_message_id ?? null;
+          }
+          lastSeenMsgByGroupRef.current = initMap;
+          seenInitializedRef.current = true;
+          return;
+        }
+
+        const projColorMap = new Map(projects.map((p) => [p.id, p.color]));
+        for (const g of groups) {
+          const latestId = g.last_message_id ?? null;
+          const prevId = lastSeenMsgByGroupRef.current[g.id];
+          if (latestId && latestId !== prevId) {
+            lastSeenMsgByGroupRef.current[g.id] = latestId;
+            enqueueChatNotification({
+              messageId: latestId,
+              groupId: g.id,
+              groupName: g.name,
+              projectColor:
+                (g.project_id && projColorMap.get(g.project_id)) || '#6366f1',
+              senderName: g.last_message_sender || tr('群成员', 'Member'),
+              content: g.last_message_content || '',
+            });
+          } else if (prevId === undefined) {
+            lastSeenMsgByGroupRef.current[g.id] = latestId;
+          }
+        }
+      } catch {
+        // ignore transient network errors
+      }
+    }, 3500);
+    return () => window.clearInterval(timer);
+  }, [currentUser, projects, enqueueChatNotification, tr]);
 
   // Check Auth Status on Mount
   useEffect(() => {
@@ -1067,14 +1212,117 @@ export const App: React.FC = () => {
         members={members}
         tasks={tasks}
         chatGroups={chatGroups}
+        mutedGroupIds={mutedGroupIds}
         onClose={() => setChatDrawerOpen(false)}
         onSyncGroups={(groups) => setChatGroups(groups)}
+        onToggleMuteGroup={handleToggleMuteGroup}
+        onMessageSent={(group, message) => {
+          lastSeenMsgByGroupRef.current[group.id] = message.id;
+          const proj = group.project_id
+            ? projects.find((p) => p.id === group.project_id)
+            : null;
+          enqueueChatNotification({
+            messageId: message.id,
+            groupId: group.id,
+            groupName: group.name,
+            projectColor: proj?.color || '#6366f1',
+            senderName: message.sender_name,
+            content: message.content,
+          });
+        }}
         onSelectTask={(task) => {
           setChatDrawerOpen(false);
           setSelectedTaskId(task.id);
         }}
         onShowToast={showToast}
       />
+
+      {/* Bottom-Right Group Chat New Message Popup Notifications */}
+      {chatNotifications.length > 0 && (
+        <div className="fixed bottom-5 right-5 z-[60] flex flex-col gap-2.5 w-80 max-w-[calc(100vw-2.5rem)] pointer-events-none">
+          {chatNotifications.map((notif) => (
+            <div
+              key={notif.id}
+              style={{
+                borderLeftColor: notif.projectColor,
+              }}
+              className="pointer-events-auto rounded-2xl border border-slate-200/90 dark:border-slate-700/90 border-l-4 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md shadow-2xl p-3.5 transition-all"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div
+                    style={{ backgroundColor: notif.projectColor }}
+                    className="w-7 h-7 rounded-lg text-white flex items-center justify-center shrink-0 shadow-xs"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-white truncate">
+                      <Hash
+                        className="w-3 h-3 shrink-0"
+                        style={{ color: notif.projectColor }}
+                      />
+                      <span className="truncate">{notif.groupName}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      {tr('收到群聊新消息', 'New channel message')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setChatNotifications((prev) =>
+                      prev.filter((item) => item.id !== notif.id)
+                    )
+                  }
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                  title={tr('关闭提醒', 'Dismiss')}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="mt-2 px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200/60 dark:border-slate-800 text-xs">
+                <span
+                  style={{ color: notif.projectColor }}
+                  className="font-bold mr-1.5"
+                >
+                  {notif.senderName}:
+                </span>
+                <span className="text-slate-700 dark:text-slate-200 line-clamp-2 break-words">
+                  {notif.content}
+                </span>
+              </div>
+
+              <div className="mt-2.5 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToggleMuteGroup(notif.groupId)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium text-slate-500 hover:text-amber-600 dark:text-slate-400 dark:hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                >
+                  <BellOff className="w-3 h-3" />
+                  {tr('静音此群 (Mute)', 'Mute Channel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveChatGroupId(notif.groupId);
+                    setChatDrawerOpen(true);
+                    setChatNotifications((prev) =>
+                      prev.filter((item) => item.id !== notif.id)
+                    );
+                  }}
+                  style={{ backgroundColor: notif.projectColor }}
+                  className="px-3 py-1 rounded-lg text-[11px] font-semibold text-white hover:opacity-90 transition-opacity shadow-xs"
+                >
+                  {tr('打开群聊', 'Open Chat')}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Account & 5-Tier RBAC Management Modal */}
       <AccountManagementModal

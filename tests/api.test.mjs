@@ -342,4 +342,13 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   assert.equal(listMsgRes.status, 200);
   const { messages } = await listMsgRes.json();
   assert.equal(messages.length, 1);
+
+  const listGroupsRes = await fetch(`${baseUrl}/api/chat-groups`);
+  assert.equal(listGroupsRes.status, 200);
+  const { groups } = await listGroupsRes.json();
+  const updatedChatGroup = groups.find((g) => g.id === chatGroup.id);
+  assert.ok(updatedChatGroup);
+  assert.equal(updatedChatGroup.last_message_id, sentMsg.id);
+  assert.equal(updatedChatGroup.last_message_sender, '张明');
+  assert.equal(updatedChatGroup.last_message_content, '@张明 请关注 #FLW-101 子任务进度');
 });

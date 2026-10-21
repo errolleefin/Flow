@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AtSign,
+  Bell,
+  BellOff,
   FolderKanban,
   Hash,
   MessageSquare,
@@ -28,11 +30,14 @@ interface ProjectChatDrawerProps {
   activeProjectId?: string | null;
   currentUser: UserAccount | null;
   chatGroups: ChatGroup[];
+  mutedGroupIds: string[];
   projects: Project[];
   members: Member[];
   tasks: Task[];
   onClose: () => void;
   onSyncGroups: (groups: ChatGroup[]) => void;
+  onToggleMuteGroup: (groupId: string) => void;
+  onMessageSent?: (group: ChatGroup, message: ChatGroupMessage) => void;
   onSelectTask: (task: Task) => void;
   onShowToast: (msg: string, type?: 'success' | 'error') => void;
 }
@@ -43,11 +48,14 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
   activeProjectId,
   currentUser,
   chatGroups,
+  mutedGroupIds,
   projects,
   members,
   tasks,
   onClose,
   onSyncGroups,
+  onToggleMuteGroup,
+  onMessageSent,
   onSelectTask,
   onShowToast,
 }) => {
@@ -251,17 +259,18 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
       });
       setMessages((prev) => [...prev, created]);
       setInput('');
+      const updatedGroup: ChatGroup = {
+        ...activeGroup,
+        message_count: (activeGroup.message_count || 0) + 1,
+        last_message_id: created.id,
+        last_message_sender: created.sender_name,
+        last_message_content: created.content,
+        last_message_at: created.created_at,
+      };
       onSyncGroups(
-        chatGroups.map((g) =>
-          g.id === activeGroup.id
-            ? {
-                ...g,
-                message_count: (g.message_count || 0) + 1,
-                last_message_at: created.created_at,
-              }
-            : g
-        )
+        chatGroups.map((g) => (g.id === activeGroup.id ? updatedGroup : g))
       );
+      onMessageSent?.(updatedGroup, created);
     } catch (err) {
       onShowToast(
         err instanceof Error
@@ -434,6 +443,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                     : null;
                   const channelColor = proj?.color || '#6366f1';
                   const isSelected = grp.id === activeGroup?.id && !showGroupForm;
+                  const isMuted = mutedGroupIds.includes(grp.id);
                   return (
                     <div
                       key={grp.id}
@@ -469,6 +479,18 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                             <span className="text-xs font-bold truncate">
                               {grp.name}
                             </span>
+                            {isMuted && (
+                              <span
+                                className="inline-flex shrink-0"
+                                title={tr('该群聊已静音免打扰', 'Muted channel')}
+                              >
+                                <BellOff
+                                  className={`w-3 h-3 ${
+                                    isSelected ? 'text-white/85' : 'text-amber-500'
+                                  }`}
+                                />
+                              </span>
+                            )}
                           </div>
                           {proj ? (
                             <span
@@ -499,6 +521,35 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                         </div>
 
                         <div className="flex items-center gap-0.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleMuteGroup(grp.id);
+                            }}
+                            className={`p-1 rounded transition-opacity ${
+                              isMuted
+                                ? isSelected
+                                  ? 'text-white hover:bg-white/20'
+                                  : 'text-amber-500 hover:bg-amber-500/10'
+                                : `opacity-0 group-hover:opacity-100 ${
+                                    isSelected
+                                      ? 'hover:bg-white/20 text-white'
+                                      : 'text-slate-400 hover:text-amber-500'
+                                  }`
+                            }`}
+                            title={
+                              isMuted
+                                ? tr('取消群聊静音', 'Unmute channel')
+                                : tr('静音此群聊（关闭右下角弹窗）', 'Mute channel notifications')
+                            }
+                          >
+                            {isMuted ? (
+                              <BellOff className="w-3 h-3" />
+                            ) : (
+                              <Bell className="w-3 h-3" />
+                            )}
+                          </button>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -736,7 +787,33 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onToggleMuteGroup(activeGroup.id)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all ${
+                        mutedGroupIds.includes(activeGroup.id)
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
+                      }`}
+                      title={
+                        mutedGroupIds.includes(activeGroup.id)
+                          ? tr('当前群聊已静音，点击开启右下角新消息提醒', 'Channel is muted. Click to enable popup notifications.')
+                          : tr('点击静音此群聊（不再弹出右下角新消息提醒）', 'Mute this channel (suppress bottom-right popup notifications)')
+                      }
+                    >
+                      {mutedGroupIds.includes(activeGroup.id) ? (
+                        <>
+                          <BellOff className="w-3.5 h-3.5" />
+                          {tr('已静音免打扰', 'Muted')}
+                        </>
+                      ) : (
+                        <>
+                          <Bell className="w-3.5 h-3.5" style={{ color: themeColor }} />
+                          {tr('消息提醒中', 'Notify On')}
+                        </>
+                      )}
+                    </button>
                     <span
                       style={{ color: themeColor }}
                       className="inline-flex items-center gap-1 text-[11px] font-semibold"
