@@ -75,15 +75,28 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
 
   const msgEndRef = useRef<HTMLDivElement>(null);
 
+  const activeGroup =
+    chatGroups.find((g) => g.id === activeGroupId) || null;
+
   useEffect(() => {
     if (!isOpen) return;
     if (currentUser?.member_id) {
       setSelectedSenderMemId(currentUser.member_id);
-    } else if (members[0]?.id) {
-      setSelectedSenderMemId(members[0].id);
+    } else {
+      setSelectedSenderMemId('');
     }
+  }, [isOpen, currentUser?.id, currentUser?.member_id]);
+
+  useEffect(() => {
+    if (!isOpen) return;
     if (initialGroupId) {
       setActiveGroupId(initialGroupId);
+      return;
+    }
+    if (
+      activeGroupId &&
+      chatGroups.some((g) => g.id === activeGroupId)
+    ) {
       return;
     }
     // If a project is currently selected on the board, prefer selecting its bound chat group
@@ -94,17 +107,10 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
         return;
       }
     }
-    if (chatGroups.length > 0 && !activeGroupId) {
+    if (chatGroups.length > 0) {
       setActiveGroupId(chatGroups[0].id);
     }
-  }, [
-    isOpen,
-    initialGroupId,
-    activeProjectId,
-    chatGroups,
-    currentUser,
-    members,
-  ]);
+  }, [isOpen, initialGroupId, activeProjectId, chatGroups, activeGroupId]);
 
   useEffect(() => {
     if (!isOpen || !activeGroupId) {
@@ -119,7 +125,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
       .catch(() => {
         setMessages([]);
       });
-  }, [isOpen, activeGroupId]);
+  }, [isOpen, activeGroupId, activeGroup?.last_message_id]);
 
   useEffect(() => {
     msgEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -127,8 +133,6 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const activeGroup =
-    chatGroups.find((g) => g.id === activeGroupId) || null;
   const projectMap = new Map(projects.map((p) => [p.id, p]));
   const taskByKey = new Map(tasks.map((t) => [t.task_key.toUpperCase(), t]));
 
@@ -263,6 +267,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
         ...activeGroup,
         message_count: (activeGroup.message_count || 0) + 1,
         last_message_id: created.id,
+        last_message_sender_member_id: created.sender_member_id,
         last_message_sender: created.sender_name,
         last_message_content: created.content,
         last_message_at: created.created_at,
@@ -954,6 +959,11 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                       className="px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs max-w-[140px]"
                       title={tr('选择发言人员身份', 'Select sender identity')}
                     >
+                      {!currentUser?.member_id && currentUser && (
+                        <option value="">
+                          {currentUser.display_name}
+                        </option>
+                      )}
                       {members.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name}

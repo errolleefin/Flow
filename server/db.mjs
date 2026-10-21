@@ -385,7 +385,7 @@ export function getChatGroups(db, visibleProjectIds = 'all') {
 
   const latestMsgRows = db
     .prepare(
-      `SELECT m.id, m.group_id, m.sender_name, m.content, m.created_at
+      `SELECT m.id, m.group_id, m.sender_member_id, m.sender_name, m.content, m.created_at
        FROM chat_group_messages m
        INNER JOIN (
          SELECT group_id, MAX(created_at) AS max_at
@@ -414,6 +414,9 @@ export function getChatGroups(db, visibleProjectIds = 'all') {
         message_count: st ? Number(st.cnt) : 0,
         last_message_at: st ? st.last_at : null,
         last_message_id: lastMsg ? lastMsg.id : null,
+        last_message_sender_member_id: lastMsg
+          ? lastMsg.sender_member_id || null
+          : null,
         last_message_sender: lastMsg ? lastMsg.sender_name : null,
         last_message_content: lastMsg ? lastMsg.content : null,
       };

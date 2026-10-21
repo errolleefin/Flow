@@ -49,6 +49,27 @@ interface ChatPopupNotification {
   content: string;
 }
 
+function isSelfChatMessage(
+  user: UserAccount | null,
+  senderMemberId?: string | null,
+  senderName?: string | null
+): boolean {
+  if (!user) return false;
+  if (user.member_id && senderMemberId) {
+    return user.member_id === senderMemberId;
+  }
+  if (senderName) {
+    const normalized = senderName.trim().toLowerCase();
+    if (
+      user.display_name.trim().toLowerCase() === normalized ||
+      user.username.trim().toLowerCase() === normalized
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export const App: React.FC = () => {
   const { tr } = useI18n();
   const [authChecking, setAuthChecking] = useState<boolean>(true);
@@ -129,8 +150,22 @@ export const App: React.FC = () => {
   }, [mutedGroupIds]);
 
   const enqueueChatNotification = useCallback(
-    (notif: Omit<ChatPopupNotification, 'id'> & { messageId?: string }) => {
+    (
+      notif: Omit<ChatPopupNotification, 'id'> & {
+        messageId?: string;
+        senderMemberId?: string | null;
+      }
+    ) => {
       if (mutedGroupIds.includes(notif.groupId)) return;
+      if (
+        isSelfChatMessage(
+          currentUser,
+          notif.senderMemberId,
+          notif.senderName
+        )
+      ) {
+        return;
+      }
       const id =
         notif.messageId ||
         `${notif.groupId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -142,7 +177,7 @@ export const App: React.FC = () => {
         setChatNotifications((prev) => prev.filter((item) => item.id !== id));
       }, 6500);
     },
-    [mutedGroupIds]
+    [mutedGroupIds, currentUser]
   );
 
   const handleToggleMuteGroup = useCallback(
@@ -255,6 +290,7 @@ export const App: React.FC = () => {
               groupName: g.name,
               projectColor:
                 (g.project_id && projColorMap.get(g.project_id)) || '#6366f1',
+              senderMemberId: g.last_message_sender_member_id ?? null,
               senderName: g.last_message_sender || tr('群成员', 'Member'),
               content: g.last_message_content || '',
             });
@@ -304,6 +340,9 @@ export const App: React.FC = () => {
     setSelectedTaskId(null);
     setAccountModalOpen(false);
     setChatDrawerOpen(false);
+    setChatNotifications([]);
+    seenInitializedRef.current = false;
+    lastSeenMsgByGroupRef.current = {};
   };
 
   // Global Keyboard Shortcuts: Ctrl/Cmd+K, N, Esc
@@ -1218,17 +1257,27 @@ export const App: React.FC = () => {
         onToggleMuteGroup={handleToggleMuteGroup}
         onMessageSent={(group, message) => {
           lastSeenMsgByGroupRef.current[group.id] = message.id;
-          const proj = group.project_id
-            ? projects.find((p) => p.id === group.project_id)
-            : null;
-          enqueueChatNotification({
-            messageId: message.id,
-            groupId: group.id,
-            groupName: group.name,
-            projectColor: proj?.color || '#6366f1',
-            senderName: message.sender_name,
-            content: message.content,
-          });
+          // Only notify if the message was sent under another group member's identity (never for self)
+          if (
+            !isSelfChatMessage(
+              currentUser,
+              message.sender_member_id,
+              message.sender_name
+            )
+          ) {
+            const proj = group.project_id
+              ? projects.find((p) => p.id === group.project_id)
+              : null;
+            enqueueChatNotification({
+              messageId: message.id,
+              groupId: group.id,
+              groupName: group.name,
+              projectColor: proj?.color || '#6366f1',
+              senderMemberId: message.sender_member_id,
+              senderName: message.sender_name,
+              content: message.content,
+            });
+          }
         }}
         onSelectTask={(task) => {
           setChatDrawerOpen(false);
