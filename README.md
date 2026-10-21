@@ -18,7 +18,8 @@
   <img src="https://img.shields.io/badge/SQLite-Native%20node%3Asqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Vercel%20%2B%20Supabase-Supported-000000?logo=vercel&logoColor=white" alt="Vercel" />
-  <img src="https://img.shields.io/badge/License-MIT-emerald" alt="License" />
+  <img src="https://img.shields.io/badge/Release-v0.1-6366F1" alt="Release v0.1" />
+  <img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License GPL-3.0" />
 </p>
 
 ---
@@ -38,7 +39,17 @@
 4. **截止日期看板 & 月度日历双模视图（Due Date & Calendar）**：提供 5 级死线预警看板（已逾期 / 今日到期 / 未来 3 天 / 远期规划 / 未排期）与交互式月度排期日历，跨列或跨日历日期格拖拽自动更新 `due_date`。
 5. **全局效能仪表盘（Analytics & Insights）**：汇总全局交付率、死线预警、专注工时投入、项目健康度对比图、团队负载排行与高优死线雷达表。
 
-### 3. 极客级 UI/UX 与效率赋能
+### 3. 账户登录与 5 级 RBAC 权限管理体系
+- **首次部署超级管理员初始化**：初次启动检测到数据库无账户时，自动引导创建首个**超级管理员（Admin）**账号。
+- **5 级组织角色权限模型**：内置 `管理员 (Admin)`、`老板 (Boss)`、`项目主管 (Director)`、`组长 (Lead)`、`成员 (Member)` 五级预设角色，并支持按账号精细开关项目与任务的**可视项目范围 (`visible_project_ids`)、新建、编辑、删除**等细粒度权限。
+- **账号与团队人员双向绑定**：创建或编辑账号时，可直接绑定至已创建的团队成员名称上，或一键自动生成同名看板人员档案。
+
+### 4. 自定义项目沟通群聊（Project Group Chats）
+- **多频道项目群聊**：支持自由创建、编辑、删除自定义项目沟通群（可绑定特定所属项目或设为跨项目公共群，自定义参与人员范围）。
+- **任务与人员快捷联动**：群聊内置 `@成员` 快捷提及与 `#TASK-KEY` 任务引用标签，点击消息中的 `#任务编号` 即可直接唤起对应任务的右侧详情抽屉。
+
+### 5. 极客级 UI/UX 与效率赋能
+- **子任务完成时间戳自动记录**：勾选完成子任务时，右侧自动记录并展示精确的完成时间 (`completed_at`)。
 - **项目与人员全生命周期管理**：左侧导航栏与看板列头均支持一键新建、编辑、删除项目和相关人员；删除人员时自动将关联任务平顺解绑为未指派，保障任务数据安全。
 - **键盘流快捷键**：`Ctrl/Cmd + K` 唤起全局命令面板、`N` 键单键速建任务、`Ctrl/Cmd + J` 唤起 AI 智能助理、`Esc` 关闭抽屉。
 - **富任务详情抽屉**：支持子任务拆解与进度条、多选协同相关人员、自定义标签、团队评论与系统自动审计日志。
@@ -214,4 +225,4 @@ npm run build
 
 ## 开源协议
 
-本项目基于 **MIT License** 开源，欢迎自由使用、修改与提交 Pull Request。
+本项目基于 **[GNU General Public License v3.0 (GPL-3.0)](./LICENSE)** 开源，欢迎自由使用、修改与提交 Pull Request。

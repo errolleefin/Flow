@@ -18,7 +18,8 @@
   <img src="https://img.shields.io/badge/SQLite-Native%20node%3Asqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Vercel%20%2B%20Supabase-Supported-000000?logo=vercel&logoColor=white" alt="Vercel" />
-  <img src="https://img.shields.io/badge/License-MIT-emerald" alt="License" />
+  <img src="https://img.shields.io/badge/Release-v0.1-6366F1" alt="Release v0.1" />
+  <img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License GPL-3.0" />
 </p>
 
 ---
@@ -38,7 +39,17 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 4. **Due Date Board & Monthly Calendar**: Combine a 5-stage deadline warning board (Overdue / Due Today / Next 3 Days / Upcoming / Unscheduled) with an interactive monthly schedule calendar. Dragging cards across columns or calendar cells updates `due_date`.
 5. **Global Analytics & Insights Dashboard**: Monitor overall delivery rate, overdue alerts, logged focus hours, project health comparisons, team workload rankings, and high-priority deadline radars.
 
-### 3. Developer-Grade UI/UX & Productivity Tooling
+### 3. Account Authentication & 5-Tier RBAC System
+- **First-Time Super Admin Setup**: Automatically launches an initialization wizard on first deployment to create the initial **Super Admin (`admin`)** account.
+- **5-Tier Organization Role Hierarchy**: Built-in role presets for `Admin`, `Boss`, `Project Director`, `Team Lead`, and `Member`, plus granular per-account permission toggles (`visible_project_ids`, project create/edit/delete, task create/edit/delete, member management, and account management).
+- **Two-Way Team Member Binding**: Bind any user account directly to an existing team member on the board or auto-create a matching member profile upon account creation.
+
+### 4. Custom Project Communication Group Chats
+- **Multi-Channel Project Group Chats**: Create, edit, and delete custom project chat channels (either linked to a specific project or cross-project, with customizable participant lists).
+- **Interactive `@Member` & `#TASK-KEY` References**: Quick-insert `@member` mentions and `#TASK-KEY` references in messages; click any `#TASK-KEY` chip in the chat stream to jump directly to that task's detail drawer.
+
+### 5. Developer-Grade UI/UX & Productivity Tooling
+- **Subtask Completion Timestamps**: Checking off a subtask automatically records and displays the exact completion timestamp (`completed_at`) on the right side of the subtask item.
 - **Full Lifecycle Management for Projects & Personnel**: Create, edit, and delete projects and team members directly from the sidebar or board column headers. Deleting a member safely unassigns their tasks without data loss.
 - **Keyboard-First Navigation**: Press `Ctrl/Cmd + K` for the global Command Palette, `N` for quick task creation, `Ctrl/Cmd + J` to toggle the AI Assistant, and `Esc` to dismiss active drawers or modals.
 - **Rich Task Detail Drawer**: Break down tasks into subtasks with progress tracking, assign multiple collaborators, manage custom tags, post team comments, and review automated activity audit logs.
@@ -214,4 +225,4 @@ npm run build
 
 ## License
 
-Released under the **MIT License**. Contributions, issues, and pull requests are welcome.
+Released under the **[GNU General Public License v3.0 (GPL-3.0)](./LICENSE)**. Contributions, issues, and pull requests are welcome.

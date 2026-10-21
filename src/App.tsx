@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiClient } from './api/client';
+import { apiClient, setAuthToken } from './api/client';
 import { AIAssistantDrawer } from './components/AIAssistantDrawer';
+import { AccountManagementModal } from './components/AccountManagementModal';
+import { AuthScreen } from './components/AuthScreen';
 import { CommandPalette } from './components/CommandPalette';
 import { CreateTaskModal, type ModalMode } from './components/CreateTaskModal';
 import { PomodoroWidget } from './components/PomodoroWidget';
+import { ProjectChatDrawer } from './components/ProjectChatDrawer';
 import { Sidebar } from './components/Sidebar';
 import { TaskDetailDrawer } from './components/TaskDetailDrawer';
 import { TopHeader } from './components/TopHeader';
@@ -15,10 +18,12 @@ import { StatusBoard } from './components/boards/StatusBoard';
 import { useI18n } from './i18n/I18nContext';
 import type {
   BoardViewType,
+  ChatGroup,
   FilterState,
   Member,
   Project,
   Task,
+  UserAccount,
 } from './types';
 import { extractAllTags, filterTasks } from './utils/taskFilters';
 
@@ -34,9 +39,14 @@ const INITIAL_FILTERS: FilterState = {
 
 export const App: React.FC = () => {
   const { tr } = useI18n();
+  const [authChecking, setAuthChecking] = useState<boolean>(true);
+  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [toast, setToast] = useState<{
     message: string;
@@ -59,6 +69,11 @@ export const App: React.FC = () => {
   );
   const [commandOpen, setCommandOpen] = useState<boolean>(false);
   const [aiDrawerOpen, setAiDrawerOpen] = useState<boolean>(false);
+  const [chatDrawerOpen, setChatDrawerOpen] = useState<boolean>(false);
+  const [activeChatGroupId, setActiveChatGroupId] = useState<string | null>(
+    null
+  );
+  const [accountModalOpen, setAccountModalOpen] = useState<boolean>(false);
   const [pomodoroTask, setPomodoroTask] = useState<Task | null>(null);
 
   const showToast = useCallback(
@@ -91,6 +106,12 @@ export const App: React.FC = () => {
       setProjects(data.projects);
       setMembers(data.members);
       setTasks(data.tasks);
+      if (data.chatGroups) {
+        setChatGroups(data.chatGroups);
+      }
+      if (data.currentUser) {
+        setCurrentUser(data.currentUser);
+      }
     } catch (err) {
       showToast(
         err instanceof Error
@@ -103,12 +124,46 @@ export const App: React.FC = () => {
     }
   }, [showToast, tr]);
 
+  // Check Auth Status on Mount
   useEffect(() => {
-    loadBootstrap();
+    let mounted = true;
+    (async () => {
+      try {
+        setAuthChecking(true);
+        const status = await apiClient.getAuthStatus();
+        if (!mounted) return;
+        setAuthInitialized(status.initialized);
+        const user = status.currentUser || status.user || null;
+        setCurrentUser(user);
+        if (status.initialized && user) {
+          await loadBootstrap();
+        }
+      } catch {
+        // Fallback if auth endpoint unreachable
+      } finally {
+        if (mounted) setAuthChecking(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, [loadBootstrap]);
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout();
+    } catch {
+      setAuthToken(null);
+    }
+    setCurrentUser(null);
+    setSelectedTaskId(null);
+    setAccountModalOpen(false);
+    setChatDrawerOpen(false);
+  };
 
   // Global Keyboard Shortcuts: Ctrl/Cmd+K, N, Esc
   useEffect(() => {
+    if (!currentUser) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const isInput =
@@ -133,6 +188,8 @@ export const App: React.FC = () => {
       if (e.key === 'Escape') {
         if (commandOpen) setCommandOpen(false);
         else if (aiDrawerOpen) setAiDrawerOpen(false);
+        else if (chatDrawerOpen) setChatDrawerOpen(false);
+        else if (accountModalOpen) setAccountModalOpen(false);
         else if (modalMode) {
           setModalMode(null);
           setEditingProject(null);
@@ -141,7 +198,11 @@ export const App: React.FC = () => {
         return;
       }
 
-      if (!isInput && (e.key === 'n' || e.key === 'N')) {
+      if (
+        !isInput &&
+        (e.key === 'n' || e.key === 'N') &&
+        currentUser.permissions.can_create_task
+      ) {
         e.preventDefault();
         setQuickCreateDefaults({});
         setModalMode('task');
@@ -150,7 +211,15 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [commandOpen, aiDrawerOpen, modalMode, selectedTaskId]);
+  }, [
+    commandOpen,
+    aiDrawerOpen,
+    chatDrawerOpen,
+    accountModalOpen,
+    modalMode,
+    selectedTaskId,
+    currentUser,
+  ]);
 
   const filteredTasks = useMemo(
     () => filterTasks(tasks, filters),
@@ -588,6 +657,33 @@ export const App: React.FC = () => {
     }
   };
 
+  if (authChecking) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-slate-950 text-slate-400 text-xs">
+        {tr('正在验证身份与权限体系...', 'Verifying identity & RBAC permissions...')}
+      </div>
+    );
+  }
+
+  if (!authInitialized || !currentUser) {
+    return (
+      <AuthScreen
+        initialized={authInitialized}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode((prev) => !prev)}
+        onAuthenticated={async (user) => {
+          setAuthInitialized(true);
+          setCurrentUser(user);
+          await loadBootstrap();
+        }}
+      />
+    );
+  }
+
+  const canManageAccounts =
+    currentUser.role === 'admin' ||
+    Boolean(currentUser.permissions.can_manage_accounts);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-[#090D16] text-slate-900 dark:text-slate-100">
       {/* Left Navigation Sidebar */}
@@ -597,6 +693,8 @@ export const App: React.FC = () => {
         projects={projects}
         members={members}
         tasks={tasks}
+        chatGroups={chatGroups}
+        currentUser={currentUser}
         filters={filters}
         onUpdateFilter={(patch) =>
           setFilters((prev) => ({ ...prev, ...patch }))
@@ -619,6 +717,12 @@ export const App: React.FC = () => {
           setModalMode('member');
         }}
         onDeleteMember={handleDeleteMember}
+        onOpenChatDrawer={(groupId) => {
+          if (groupId) setActiveChatGroupId(groupId);
+          setChatDrawerOpen(true);
+        }}
+        onOpenAccountModal={() => setAccountModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -631,6 +735,9 @@ export const App: React.FC = () => {
           allTags={allTags}
           totalFilteredCount={filteredTasks.length}
           totalTaskCount={tasks.length}
+          chatGroupCount={chatGroups.length}
+          canCreateTask={currentUser.permissions.can_create_task}
+          canManageAccounts={canManageAccounts}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode((prev) => !prev)}
           onUpdateFilter={(patch) =>
@@ -643,6 +750,8 @@ export const App: React.FC = () => {
           }}
           onOpenCommandPalette={() => setCommandOpen(true)}
           onOpenAiAssistant={() => setAiDrawerOpen(true)}
+          onOpenChatDrawer={() => setChatDrawerOpen(true)}
+          onOpenAccountModal={() => setAccountModalOpen(true)}
           onExportJSON={handleExportJSON}
           onExportCSV={handleExportCSV}
           onImportJSON={handleImportJSON}
@@ -668,6 +777,13 @@ export const App: React.FC = () => {
                   onUpdateTask={handleUpdateTask}
                   onSelectTask={(t) => setSelectedTaskId(t.id)}
                   onQuickCreate={(defaults) => {
+                    if (!currentUser.permissions.can_create_task) {
+                      showToast(
+                        tr('当前账号无新建任务权限', 'No permission to create tasks'),
+                        'error'
+                      );
+                      return;
+                    }
                     setQuickCreateDefaults(defaults);
                     setModalMode('task');
                   }}
@@ -683,18 +799,48 @@ export const App: React.FC = () => {
                   onUpdateTask={handleUpdateTask}
                   onSelectTask={(t) => setSelectedTaskId(t.id)}
                   onQuickCreate={(defaults) => {
+                    if (!currentUser.permissions.can_create_task) {
+                      showToast(
+                        tr('当前账号无新建任务权限', 'No permission to create tasks'),
+                        'error'
+                      );
+                      return;
+                    }
                     setQuickCreateDefaults(defaults);
                     setModalMode('task');
                   }}
                   onOpenNewProject={() => {
+                    if (!currentUser.permissions.can_create_project) {
+                      showToast(
+                        tr('当前账号无新建项目权限', 'No permission to create projects'),
+                        'error'
+                      );
+                      return;
+                    }
                     setEditingProject(null);
                     setModalMode('project');
                   }}
                   onEditProject={(proj) => {
+                    if (!currentUser.permissions.can_edit_project) {
+                      showToast(
+                        tr('当前账号无编辑项目权限', 'No permission to edit projects'),
+                        'error'
+                      );
+                      return;
+                    }
                     setEditingProject(proj);
                     setModalMode('project');
                   }}
-                  onDeleteProject={handleDeleteProject}
+                  onDeleteProject={(proj) => {
+                    if (!currentUser.permissions.can_delete_project) {
+                      showToast(
+                        tr('当前账号无删除项目权限', 'No permission to delete projects'),
+                        'error'
+                      );
+                      return;
+                    }
+                    handleDeleteProject(proj);
+                  }}
                   onStartPomodoro={(t) => setPomodoroTask(t)}
                 />
               )}
@@ -707,18 +853,48 @@ export const App: React.FC = () => {
                   onUpdateTask={handleUpdateTask}
                   onSelectTask={(t) => setSelectedTaskId(t.id)}
                   onQuickCreate={(defaults) => {
+                    if (!currentUser.permissions.can_create_task) {
+                      showToast(
+                        tr('当前账号无新建任务权限', 'No permission to create tasks'),
+                        'error'
+                      );
+                      return;
+                    }
                     setQuickCreateDefaults(defaults);
                     setModalMode('task');
                   }}
                   onOpenNewMember={() => {
+                    if (!currentUser.permissions.can_manage_members) {
+                      showToast(
+                        tr('当前账号无管理人员权限', 'No permission to manage members'),
+                        'error'
+                      );
+                      return;
+                    }
                     setEditingMember(null);
                     setModalMode('member');
                   }}
                   onEditMember={(mem) => {
+                    if (!currentUser.permissions.can_manage_members) {
+                      showToast(
+                        tr('当前账号无管理人员权限', 'No permission to manage members'),
+                        'error'
+                      );
+                      return;
+                    }
                     setEditingMember(mem);
                     setModalMode('member');
                   }}
-                  onDeleteMember={handleDeleteMember}
+                  onDeleteMember={(mem) => {
+                    if (!currentUser.permissions.can_manage_members) {
+                      showToast(
+                        tr('当前账号无管理人员权限', 'No permission to manage members'),
+                        'error'
+                      );
+                      return;
+                    }
+                    handleDeleteMember(mem);
+                  }}
                   onStartPomodoro={(t) => setPomodoroTask(t)}
                 />
               )}
@@ -731,6 +907,13 @@ export const App: React.FC = () => {
                   onUpdateTask={handleUpdateTask}
                   onSelectTask={(t) => setSelectedTaskId(t.id)}
                   onQuickCreate={(defaults) => {
+                    if (!currentUser.permissions.can_create_task) {
+                      showToast(
+                        tr('当前账号无新建任务权限', 'No permission to create tasks'),
+                        'error'
+                      );
+                      return;
+                    }
                     setQuickCreateDefaults(defaults);
                     setModalMode('task');
                   }}
@@ -756,6 +939,9 @@ export const App: React.FC = () => {
         task={selectedTask}
         projects={projects}
         members={members}
+        currentUserMemberId={currentUser.member_id}
+        canEditTask={currentUser.permissions.can_edit_task}
+        canDeleteTask={currentUser.permissions.can_delete_task}
         onClose={() => setSelectedTaskId(null)}
         onUpdateTask={handleUpdateTask}
         onDeleteTask={handleDeleteTask}
@@ -812,11 +998,42 @@ export const App: React.FC = () => {
           setProjects(data.projects);
           setMembers(data.members);
           setTasks(data.tasks);
+          if (data.chatGroups) setChatGroups(data.chatGroups);
         }}
         onSelectTaskById={(taskId) => {
           setAiDrawerOpen(false);
           setSelectedTaskId(taskId);
         }}
+        onShowToast={showToast}
+      />
+
+      {/* Custom Project Communication Group Chat Drawer */}
+      <ProjectChatDrawer
+        isOpen={chatDrawerOpen}
+        initialGroupId={activeChatGroupId}
+        currentUser={currentUser}
+        projects={projects}
+        members={members}
+        tasks={tasks}
+        chatGroups={chatGroups}
+        onClose={() => setChatDrawerOpen(false)}
+        onSyncGroups={(groups) => setChatGroups(groups)}
+        onSelectTask={(task) => {
+          setChatDrawerOpen(false);
+          setSelectedTaskId(task.id);
+        }}
+        onShowToast={showToast}
+      />
+
+      {/* Account & 5-Tier RBAC Management Modal */}
+      <AccountManagementModal
+        isOpen={accountModalOpen}
+        currentUser={currentUser}
+        projects={projects}
+        members={members}
+        onClose={() => setAccountModalOpen(false)}
+        onRefreshBootstrap={loadBootstrap}
+        onUpdateCurrentUser={(user) => setCurrentUser(user)}
         onShowToast={showToast}
       />
 

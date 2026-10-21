@@ -8,6 +8,36 @@ export type DueBucket = 'overdue' | 'today' | 'next3days' | 'upcoming' | 'nodate
 
 export type DueStatus = 'completed' | 'overdue' | 'due_today' | 'due_soon' | 'upcoming' | 'none';
 
+export type AccountRole = 'admin' | 'boss' | 'director' | 'lead' | 'member';
+
+export interface UserPermissions {
+  visible_project_ids: 'all' | string[];
+  can_create_project: boolean;
+  can_edit_project: boolean;
+  can_delete_project: boolean;
+  can_create_task: boolean;
+  can_edit_task: boolean;
+  can_delete_task: boolean;
+  can_manage_members: boolean;
+  can_manage_accounts: boolean;
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  display_name: string;
+  role: AccountRole;
+  member_id: string | null;
+  permissions: UserPermissions;
+  created_at: string;
+}
+
+export interface AuthStatusPayload {
+  initialized: boolean;
+  currentUser: UserAccount | null;
+  user?: UserAccount | null;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -31,6 +61,7 @@ export interface Subtask {
   task_id: string;
   title: string;
   completed: boolean;
+  completed_at: string | null;
   created_at: string;
 }
 
@@ -64,6 +95,30 @@ export interface Task {
   activities: Activity[];
 }
 
+export interface ChatGroup {
+  id: string;
+  name: string;
+  description: string;
+  project_id: string | null;
+  member_ids: string[];
+  created_by: string | null;
+  created_at: string;
+  message_count?: number;
+  last_message_at?: string | null;
+}
+
+export interface ChatGroupMessage {
+  id: string;
+  group_id: string;
+  sender_user_id: string | null;
+  sender_member_id: string | null;
+  sender_name: string;
+  sender_role: string;
+  avatar_bg: string;
+  content: string;
+  created_at: string;
+}
+
 export interface FilterState {
   search: string;
   projectId: string | 'all';
@@ -78,6 +133,8 @@ export interface BootstrapPayload {
   projects: Project[];
   members: Member[];
   tasks: Task[];
+  chatGroups?: ChatGroup[];
+  currentUser?: UserAccount | null;
 }
 
 export interface AiSettings {
@@ -113,4 +170,3 @@ export interface AiChatMessage {
   operations: AiOperationReceipt[];
   created_at: string;
 }
-

@@ -3,6 +3,168 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+export const DEFAULT_ROLE_PERMISSIONS = {
+  admin: {
+    visible_project_ids: 'all',
+    can_create_project: true,
+    can_edit_project: true,
+    can_delete_project: true,
+    can_create_task: true,
+    can_edit_task: true,
+    can_delete_task: true,
+    can_manage_members: true,
+    can_manage_accounts: true,
+  },
+  boss: {
+    visible_project_ids: 'all',
+    can_create_project: true,
+    can_edit_project: true,
+    can_delete_project: true,
+    can_create_task: true,
+    can_edit_task: true,
+    can_delete_task: true,
+    can_manage_members: true,
+    can_manage_accounts: false,
+  },
+  director: {
+    visible_project_ids: 'all',
+    can_create_project: true,
+    can_edit_project: true,
+    can_delete_project: false,
+    can_create_task: true,
+    can_edit_task: true,
+    can_delete_task: true,
+    can_manage_members: true,
+    can_manage_accounts: false,
+  },
+  lead: {
+    visible_project_ids: 'all',
+    can_create_project: false,
+    can_edit_project: true,
+    can_delete_project: false,
+    can_create_task: true,
+    can_edit_task: true,
+    can_delete_task: false,
+    can_manage_members: false,
+    can_manage_accounts: false,
+  },
+  member: {
+    visible_project_ids: 'all',
+    can_create_project: false,
+    can_edit_project: false,
+    can_delete_project: false,
+    can_create_task: true,
+    can_edit_task: true,
+    can_delete_task: false,
+    can_manage_members: false,
+    can_manage_accounts: false,
+  },
+};
+
+export function getDefaultPermissionsForRole(role = 'member') {
+  const base = DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS.member;
+  return { ...base };
+}
+
+export function normalizePermissions(role, customPerms) {
+  const defaults = getDefaultPermissionsForRole(role);
+  if (!customPerms || typeof customPerms !== 'object') {
+    return defaults;
+  }
+  const visible =
+    customPerms.visible_project_ids === 'all' ||
+    Array.isArray(customPerms.visible_project_ids)
+      ? customPerms.visible_project_ids
+      : defaults.visible_project_ids;
+
+  return {
+    visible_project_ids: role === 'admin' ? 'all' : visible,
+    can_create_project:
+      role === 'admin'
+        ? true
+        : customPerms.can_create_project !== undefined
+        ? Boolean(customPerms.can_create_project)
+        : defaults.can_create_project,
+    can_edit_project:
+      role === 'admin'
+        ? true
+        : customPerms.can_edit_project !== undefined
+        ? Boolean(customPerms.can_edit_project)
+        : defaults.can_edit_project,
+    can_delete_project:
+      role === 'admin'
+        ? true
+        : customPerms.can_delete_project !== undefined
+        ? Boolean(customPerms.can_delete_project)
+        : defaults.can_delete_project,
+    can_create_task:
+      role === 'admin'
+        ? true
+        : customPerms.can_create_task !== undefined
+        ? Boolean(customPerms.can_create_task)
+        : defaults.can_create_task,
+    can_edit_task:
+      role === 'admin'
+        ? true
+        : customPerms.can_edit_task !== undefined
+        ? Boolean(customPerms.can_edit_task)
+        : defaults.can_edit_task,
+    can_delete_task:
+      role === 'admin'
+        ? true
+        : customPerms.can_delete_task !== undefined
+        ? Boolean(customPerms.can_delete_task)
+        : defaults.can_delete_task,
+    can_manage_members:
+      role === 'admin'
+        ? true
+        : customPerms.can_manage_members !== undefined
+        ? Boolean(customPerms.can_manage_members)
+        : defaults.can_manage_members,
+    can_manage_accounts:
+      role === 'admin'
+        ? true
+        : customPerms.can_manage_accounts !== undefined
+        ? Boolean(customPerms.can_manage_accounts)
+        : defaults.can_manage_accounts,
+  };
+}
+
+export function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return `${salt}:${derived}`;
+}
+
+export function verifyPassword(password, storedHash) {
+  if (!storedHash || !storedHash.includes(':')) return false;
+  const [salt, key] = storedHash.split(':');
+  const derived = crypto.scryptSync(String(password), salt, 64).toString('hex');
+  return crypto.timingSafeEqual(
+    Buffer.from(key, 'hex'),
+    Buffer.from(derived, 'hex')
+  );
+}
+
+export function serializeUser(row) {
+  if (!row) return null;
+  let parsedPerms;
+  try {
+    parsedPerms = JSON.parse(row.permissions || '{}');
+  } catch {
+    parsedPerms = {};
+  }
+  return {
+    id: row.id,
+    username: row.username,
+    display_name: row.display_name,
+    role: row.role,
+    member_id: row.member_id || null,
+    permissions: normalizePermissions(row.role, parsedPerms),
+    created_at: row.created_at,
+  };
+}
+
 export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) {
@@ -57,6 +219,7 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
       task_id TEXT NOT NULL,
       title TEXT NOT NULL,
       completed INTEGER DEFAULT 0,
+      completed_at TEXT DEFAULT NULL,
       created_at TEXT NOT NULL,
       FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
     );
@@ -87,7 +250,54 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
       operations TEXT DEFAULT '[]',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      member_id TEXT DEFAULT NULL,
+      permissions TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      project_id TEXT DEFAULT NULL,
+      member_ids TEXT DEFAULT '[]',
+      created_by TEXT DEFAULT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_group_messages (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      sender_user_id TEXT DEFAULT NULL,
+      sender_member_id TEXT DEFAULT NULL,
+      sender_name TEXT NOT NULL,
+      sender_role TEXT DEFAULT '',
+      avatar_bg TEXT DEFAULT 'from-indigo-500 to-purple-600',
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE
+    );
   `);
+
+  // Safe migration for existing databases missing subtasks.completed_at
+  const subCols = db.prepare('PRAGMA table_info(subtasks)').all();
+  if (!subCols.some((c) => c.name === 'completed_at')) {
+    db.exec('ALTER TABLE subtasks ADD COLUMN completed_at TEXT DEFAULT NULL;');
+  }
 
   const aiRow = db.prepare('SELECT id FROM ai_settings WHERE id = 1').get();
   if (!aiRow) {
@@ -122,7 +332,7 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
 
 export function clearWorkspaceData(db) {
   db.exec(
-    'DELETE FROM activities; DELETE FROM subtasks; DELETE FROM tasks; DELETE FROM projects; DELETE FROM members;'
+    'DELETE FROM chat_group_messages; DELETE FROM chat_groups; DELETE FROM activities; DELETE FROM subtasks; DELETE FROM tasks; DELETE FROM projects; DELETE FROM members; UPDATE users SET member_id = NULL;'
   );
 }
 
@@ -135,6 +345,7 @@ export function getFullTaskById(db, taskId) {
     .map((s) => ({
       ...s,
       completed: Boolean(s.completed),
+      completed_at: s.completed_at || null,
     }));
   const activities = db
     .prepare(
@@ -151,14 +362,58 @@ export function getFullTaskById(db, taskId) {
   };
 }
 
-export function getBootstrapData(db) {
-  const projects = db
+export function getChatGroups(db, visibleProjectIds = 'all') {
+  const groups = db
+    .prepare('SELECT * FROM chat_groups ORDER BY created_at ASC')
+    .all();
+  const msgStats = db
+    .prepare(
+      'SELECT group_id, COUNT(*) as cnt, MAX(created_at) as last_at FROM chat_group_messages GROUP BY group_id'
+    )
+    .all();
+  const statMap = new Map(msgStats.map((s) => [s.group_id, s]));
+
+  return groups
+    .filter((g) => {
+      if (visibleProjectIds === 'all' || !Array.isArray(visibleProjectIds)) {
+        return true;
+      }
+      if (!g.project_id) return true;
+      return visibleProjectIds.includes(g.project_id);
+    })
+    .map((g) => {
+      const st = statMap.get(g.id);
+      return {
+        ...g,
+        project_id: g.project_id || null,
+        member_ids: JSON.parse(g.member_ids || '[]'),
+        message_count: st ? Number(st.cnt) : 0,
+        last_message_at: st ? st.last_at : null,
+      };
+    });
+}
+
+export function getBootstrapData(db, visibleProjectIds = 'all') {
+  const allProjects = db
     .prepare('SELECT * FROM projects ORDER BY created_at ASC')
     .all();
+  const projects =
+    visibleProjectIds === 'all' || !Array.isArray(visibleProjectIds)
+      ? allProjects
+      : allProjects.filter((p) => visibleProjectIds.includes(p.id));
+
+  const allowedProjSet = new Set(projects.map((p) => p.id));
+
   const members = db.prepare('SELECT * FROM members ORDER BY rowid ASC').all();
   const taskRows = db
     .prepare('SELECT * FROM tasks ORDER BY position ASC, created_at DESC')
-    .all();
+    .all()
+    .filter((t) =>
+      visibleProjectIds === 'all' || !Array.isArray(visibleProjectIds)
+        ? true
+        : allowedProjSet.has(t.project_id)
+    );
+
   const allSubtasks = db
     .prepare('SELECT * FROM subtasks ORDER BY created_at ASC')
     .all();
@@ -169,7 +424,11 @@ export function getBootstrapData(db) {
   const subtasksByTask = new Map();
   for (const s of allSubtasks) {
     const list = subtasksByTask.get(s.task_id) || [];
-    list.push({ ...s, completed: Boolean(s.completed) });
+    list.push({
+      ...s,
+      completed: Boolean(s.completed),
+      completed_at: s.completed_at || null,
+    });
     subtasksByTask.set(s.task_id, list);
   }
 
@@ -188,5 +447,7 @@ export function getBootstrapData(db) {
     activities: activitiesByTask.get(row.id) || [],
   }));
 
-  return { projects, members, tasks };
+  const chatGroups = getChatGroups(db, visibleProjectIds);
+
+  return { projects, members, tasks, chatGroups };
 }

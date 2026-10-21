@@ -5,10 +5,12 @@ import {
   Download,
   FilterX,
   Languages,
+  MessageSquare,
   Moon,
   Plus,
   RotateCcw,
   Search,
+  ShieldCheck,
   Sparkles,
   Sun,
   Upload,
@@ -31,6 +33,9 @@ interface TopHeaderProps {
   allTags: string[];
   totalFilteredCount: number;
   totalTaskCount: number;
+  chatGroupCount?: number;
+  canCreateTask?: boolean;
+  canManageAccounts?: boolean;
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onUpdateFilter: (patch: Partial<FilterState>) => void;
@@ -38,6 +43,8 @@ interface TopHeaderProps {
   onOpenCreateTask: () => void;
   onOpenCommandPalette: () => void;
   onOpenAiAssistant: () => void;
+  onOpenChatDrawer: () => void;
+  onOpenAccountModal?: () => void;
   onExportJSON: () => void;
   onExportCSV: () => void;
   onImportJSON: (file: File) => void;
@@ -52,6 +59,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   allTags,
   totalFilteredCount,
   totalTaskCount,
+  chatGroupCount = 0,
+  canCreateTask = true,
+  canManageAccounts = false,
   darkMode,
   onToggleDarkMode,
   onUpdateFilter,
@@ -59,6 +69,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenCreateTask,
   onOpenCommandPalette,
   onOpenAiAssistant,
+  onOpenChatDrawer,
+  onOpenAccountModal,
   onExportJSON,
   onExportCSV,
   onImportJSON,
@@ -218,6 +230,35 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </button>
 
+          {/* Account Management Trigger (Admin) */}
+          {canManageAccounts && onOpenAccountModal && (
+            <button
+              type="button"
+              onClick={onOpenAccountModal}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-semibold transition-colors"
+              title={tr('打开账号与 5 级权限管理', 'Open Account & 5-Tier RBAC Management')}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{tr('账号管理', 'Accounts')}</span>
+            </button>
+          )}
+
+          {/* Custom Project Group Chat Trigger */}
+          <button
+            type="button"
+            onClick={onOpenChatDrawer}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-indigo-500/50 transition-colors"
+            title={tr('打开自定义项目沟通群聊', 'Open Custom Project Group Chats')}
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-indigo-500" />
+            <span>{tr('项目群聊', 'Group Chat')}</span>
+            {chatGroupCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
+                {chatGroupCount}
+              </span>
+            )}
+          </button>
+
           {/* AI Assistant Trigger Button */}
           <button
             type="button"
@@ -234,17 +275,19 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </button>
 
           {/* Create Task Button */}
-          <button
-            type="button"
-            onClick={onOpenCreateTask}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm shadow-indigo-500/25 transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{tr('新建任务', 'New Task')}</span>
-            <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-indigo-700 text-indigo-100 font-mono text-[10px]">
-              N
-            </kbd>
-          </button>
+          {canCreateTask && (
+            <button
+              type="button"
+              onClick={onOpenCreateTask}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm shadow-indigo-500/25 transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{tr('新建任务', 'New Task')}</span>
+              <kbd className="hidden sm:inline-block px-1 py-0.2 rounded bg-indigo-700 text-indigo-100 font-mono text-[10px]">
+                N
+              </kbd>
+            </button>
+          )}
         </div>
       </div>
 

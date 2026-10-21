@@ -1,21 +1,47 @@
 import type {
+  AccountRole,
   Activity,
   AiChatMessage,
   AiSettings,
+  AuthStatusPayload,
   BootstrapPayload,
+  ChatGroup,
+  ChatGroupMessage,
   Member,
   Project,
   Subtask,
   Task,
+  UserAccount,
+  UserPermissions,
 } from '../types';
 
+const AUTH_TOKEN_KEY = 'flow-auth-token';
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string | null) {
+  if (token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const token = getAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...((options?.headers as Record<string, string>) || {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers || {}),
-    },
     ...options,
+    headers,
   });
   if (!res.ok) {
     let errMsg = `请求失败 (${res.status})`;
@@ -31,6 +57,69 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const apiClient = {
+  // Auth & User Management
+  getAuthStatus: () => request<AuthStatusPayload>('/api/auth/status'),
+
+  setupSuperAdmin: (payload: {
+    username: string;
+    display_name: string;
+    password: string;
+    create_member?: boolean;
+  }) =>
+    request<{ token: string; user: UserAccount }>('/api/auth/setup', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  login: (payload: { username: string; password: string }) =>
+    request<{ token: string; user: UserAccount }>('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  logout: () =>
+    request<{ ok: boolean }>('/api/auth/logout', {
+      method: 'POST',
+    }),
+
+  getUsers: () => request<{ users: UserAccount[] }>('/api/users'),
+
+  createUser: (payload: {
+    username: string;
+    display_name: string;
+    password: string;
+    role: AccountRole;
+    member_id: string | null;
+    auto_create_member?: boolean;
+    permissions: UserPermissions;
+  }) =>
+    request<UserAccount>('/api/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateUser: (
+    userId: string,
+    patch: Partial<{
+      username: string;
+      display_name: string;
+      password: string;
+      role: AccountRole;
+      member_id: string | null;
+      permissions: UserPermissions;
+    }>
+  ) =>
+    request<UserAccount>(`/api/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  deleteUser: (userId: string) =>
+    request<{ ok: boolean }>(`/api/users/${userId}`, {
+      method: 'DELETE',
+    }),
+
+  // Bootstrap & Tasks
   getBootstrap: () => request<BootstrapPayload>('/api/bootstrap'),
 
   createTask: (
@@ -80,7 +169,13 @@ export const apiClient = {
       body: JSON.stringify({ member_id, content }),
     }),
 
-  createProject: (payload: { name: string; code?: string; color: string; description?: string }) =>
+  // Projects
+  createProject: (payload: {
+    name: string;
+    code?: string;
+    color: string;
+    description?: string;
+  }) =>
     request<Project>('/api/projects', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -100,6 +195,7 @@ export const apiClient = {
       method: 'DELETE',
     }),
 
+  // Members
   createMember: (payload: {
     name: string;
     role: string;
@@ -132,6 +228,63 @@ export const apiClient = {
       method: 'DELETE',
     }),
 
+  // Custom Project Communication Group Chats
+  getChatGroups: () => request<{ groups: ChatGroup[] }>('/api/chat-groups'),
+
+  createChatGroup: (payload: {
+    name: string;
+    description?: string;
+    project_id?: string | null;
+    member_ids?: string[];
+  }) =>
+    request<ChatGroup>('/api/chat-groups', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateChatGroup: (
+    groupId: string,
+    patch: Partial<{
+      name: string;
+      description: string;
+      project_id: string | null;
+      member_ids: string[];
+    }>
+  ) =>
+    request<ChatGroup>(`/api/chat-groups/${groupId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+
+  deleteChatGroup: (groupId: string) =>
+    request<{ ok: boolean }>(`/api/chat-groups/${groupId}`, {
+      method: 'DELETE',
+    }),
+
+  getChatGroupMessages: (groupId: string) =>
+    request<{ messages: ChatGroupMessage[] }>(
+      `/api/chat-groups/${groupId}/messages`
+    ),
+
+  sendChatGroupMessage: (
+    groupId: string,
+    payload: {
+      content: string;
+      sender_member_id?: string | null;
+      sender_name?: string;
+    }
+  ) =>
+    request<ChatGroupMessage>(`/api/chat-groups/${groupId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteChatGroupMessage: (groupId: string, msgId: string) =>
+    request<{ ok: boolean }>(`/api/chat-groups/${groupId}/messages/${msgId}`, {
+      method: 'DELETE',
+    }),
+
+  // Backup & Reset
   resetDemoData: () =>
     request<BootstrapPayload>('/api/seed/reset', {
       method: 'POST',
@@ -143,6 +296,7 @@ export const apiClient = {
       body: JSON.stringify(payload),
     }),
 
+  // AI Assistant
   getAiSettings: () => request<AiSettings>('/api/ai/settings'),
 
   updateAiSettings: (patch: Partial<AiSettings>) =>

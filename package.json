@@ -1,6 +1,7 @@
 {
   "name": "flow",
-  "version": "1.0.0",
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
   "private": true,
   "type": "module",
   "description": "Flow — AI 驱动的本地全栈多维工作 Todo 与看板管理系统",

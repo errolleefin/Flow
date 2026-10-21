@@ -30,6 +30,9 @@ interface TaskDetailDrawerProps {
   task: Task | null;
   projects: Project[];
   members: Member[];
+  currentUserMemberId?: string | null;
+  canEditTask?: boolean;
+  canDeleteTask?: boolean;
   onClose: () => void;
   onUpdateTask: (taskId: string, patch: Partial<Task>) => Promise<void>;
   onDeleteTask: (taskId: string) => Promise<void>;
@@ -48,6 +51,9 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   task,
   projects,
   members,
+  currentUserMemberId = null,
+  canEditTask = true,
+  canDeleteTask = true,
   onClose,
   onUpdateTask,
   onDeleteTask,
@@ -69,9 +75,11 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
     if (task) {
       setTitle(task.title);
       setDescription(task.description || '');
-      setCommentAuthorId(task.assignee_id || members[0]?.id || '');
+      setCommentAuthorId(
+        currentUserMemberId || task.assignee_id || members[0]?.id || ''
+      );
     }
-  }, [task, members]);
+  }, [task, members, currentUserMemberId]);
 
   if (!task) return null;
 
@@ -152,14 +160,16 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
               <Play className="w-3.5 h-3.5 fill-current" />
               {tr('开启番茄专注', 'Start Pomodoro')}
             </button>
-            <button
-              type="button"
-              onClick={() => onDeleteTask(task.id)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
-              title={tr('删除此任务', 'Delete task')}
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {canDeleteTask && (
+              <button
+                type="button"
+                onClick={() => onDeleteTask(task.id)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                title={tr('删除此任务', 'Delete task')}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -501,8 +511,9 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                 >
                   <button
                     type="button"
+                    disabled={!canEditTask}
                     onClick={() => onToggleSubtask(sub.id, !sub.completed)}
-                    className="flex items-center gap-2.5 text-left flex-1 min-w-0"
+                    className="flex items-center gap-2.5 text-left flex-1 min-w-0 disabled:cursor-not-allowed"
                   >
                     {sub.completed ? (
                       <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -519,13 +530,37 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                       {sub.title}
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteSubtask(sub.id)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {sub.completed && sub.completed_at && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[10px]"
+                        title={tr(
+                          `完成时间：${new Date(sub.completed_at).toLocaleString('zh-CN')}`,
+                          `Completed at: ${new Date(sub.completed_at).toLocaleString('en-US')}`
+                        )}
+                      >
+                        <Clock className="w-2.5 h-2.5" />
+                        {new Date(sub.completed_at).toLocaleString(
+                          lang === 'en' ? 'en-US' : 'zh-CN',
+                          {
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          }
+                        )}
+                      </span>
+                    )}
+                    {canEditTask && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteSubtask(sub.id)}
+                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
