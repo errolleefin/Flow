@@ -40,16 +40,26 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 5. **Global Analytics & Insights Dashboard**: Monitor overall delivery rate, overdue alerts, logged focus hours, project health comparisons, team workload rankings, and high-priority deadline radars.
 
 ### 3. Account Authentication & 5-Tier RBAC System
-- **First-Time Super Admin Setup**: Automatically launches an initialization wizard on first deployment to create the initial **Super Admin (`admin`)** account.
-- **5-Tier Organization Role Hierarchy**: Built-in role presets for `Admin`, `Boss`, `Project Director`, `Team Lead`, and `Member`, plus granular per-account permission toggles (`visible_project_ids`, project create/edit/delete, task create/edit/delete, member management, and account management).
-- **Two-Way Team Member Binding**: Bind any user account directly to an existing team member on the board or auto-create a matching member profile upon account creation.
+- **First-Time Super Admin Setup**: When deployed with an empty user table, Flow automatically launches the **First-Time Super Admin Setup** wizard to initialize the primary `admin` account and optionally create a bound team member profile.
+- **Account Management Menu**: Super Admins can access the **Account & RBAC Management** modal from the bottom of the left sidebar or the top header to create, edit, and delete user accounts, reset passwords, and configure permissions.
+- **5-Tier Organization Role Hierarchy & Granular Overrides**: Includes 5 built-in role presets with customizable per-account permission toggles and **project visibility scoping (`All Projects` vs. `Selected Projects Only`)**:
+
+| Role Tier | Default Project Visibility | Project Create / Edit / Delete | Task Create / Edit / Delete | Manage Team Members | Manage Accounts & RBAC |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Admin** | All Projects | Create / Edit / Delete | Create / Edit / Delete | Yes | Yes |
+| **Boss** | All Projects | Create / Edit / Delete | Create / Edit / Delete | Yes | Configurable by Admin |
+| **Director** | All Projects (Scopable) | Create / Edit | Create / Edit / Delete | Yes | No |
+| **Team Lead** | All Projects (Scopable) | Edit Only | Create / Edit | No | No |
+| **Member** | Assigned Projects | Read Only | Create / Edit | No | No |
+
+- **Two-Way Team Member Binding**: Bind any login account directly to an existing team member name on the board (`member_id`), or auto-create a matching team member profile. Bound accounts automatically post task comments and group chat messages under their bound member identity.
 
 ### 4. Custom Project Communication Group Chats
-- **Multi-Channel Project Group Chats**: Create, edit, and delete custom project chat channels (either linked to a specific project or cross-project, with customizable participant lists).
-- **Interactive `@Member` & `#TASK-KEY` References**: Quick-insert `@member` mentions and `#TASK-KEY` references in messages; click any `#TASK-KEY` chip in the chat stream to jump directly to that task's detail drawer.
+- **Multi-Channel Project Group Chats**: Open the Group Chat drawer from the sidebar or top header to create, edit, and delete custom communication channels (either linked to a specific project or configured as a cross-project channel with custom participant lists).
+- **Interactive `@Member` & `#TASK-KEY` References**: Quick-insert `@member` mentions and `#TASK-KEY` task badges into messages. Clicking any `#TASK-KEY` chip in the message stream opens that task's detail drawer immediately.
 
 ### 5. Developer-Grade UI/UX & Productivity Tooling
-- **Subtask Completion Timestamps**: Checking off a subtask automatically records and displays the exact completion timestamp (`completed_at`) on the right side of the subtask item.
+- **Subtask Completion Timestamps**: Checking off a subtask in the task detail drawer automatically records the completion time (`completed_at`) and displays the formatted timestamp on the right side of the subtask row.
 - **Full Lifecycle Management for Projects & Personnel**: Create, edit, and delete projects and team members directly from the sidebar or board column headers. Deleting a member safely unassigns their tasks without data loss.
 - **Keyboard-First Navigation**: Press `Ctrl/Cmd + K` for the global Command Palette, `N` for quick task creation, `Ctrl/Cmd + J` to toggle the AI Assistant, and `Esc` to dismiss active drawers or modals.
 - **Rich Task Detail Drawer**: Break down tasks into subtasks with progress tracking, assign multiple collaborators, manage custom tags, post team comments, and review automated activity audit logs.
@@ -191,7 +201,7 @@ The repository includes [`vercel.json`](./vercel.json), the Serverless entry poi
 #### 1. Initialize Supabase Database
 1. Sign in to the [Supabase Dashboard](https://supabase.com/dashboard) and create a **New Project**.
 2. Open **SQL Editor** -> **New Query** in the left sidebar.
-3. Copy the entire contents of [`supabase/schema.sql`](./supabase/schema.sql), paste it into the editor, and click **Run** to create the 7 required tables (`projects`, `members`, `tasks`, `subtasks`, `activities`, `ai_settings`, and `ai_messages`).
+3. Copy the entire contents of [`supabase/schema.sql`](./supabase/schema.sql), paste it into the editor, and click **Run** to create the 11 required tables (`projects`, `members`, `tasks`, `subtasks`, `activities`, `ai_settings`, `ai_messages`, `users`, `sessions`, `chat_groups`, and `chat_group_messages`).
 4. Retrieve your credentials from **Project Settings -> API / Database**:
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
