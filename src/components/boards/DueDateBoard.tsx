@@ -17,6 +17,7 @@ import {
   getDueBucket,
   getTodayISO,
 } from '../../utils/dateUtils';
+import { useI18n } from '../../i18n/I18nContext';
 import { TaskCard } from '../TaskCard';
 
 interface DueDateBoardProps {
@@ -32,42 +33,54 @@ interface DueDateBoardProps {
 const DUE_COLUMNS: Array<{
   id: DueBucket;
   label: string;
+  labelEn: string;
   subtitle: string;
+  subtitleEn: string;
   badgeClass: string;
   icon: React.FC<{ className?: string }>;
 }> = [
   {
     id: 'overdue',
     label: '🚨 已逾期 Overdue',
+    labelEn: '🚨 Overdue',
     subtitle: '已超过截止日期，需立即处理',
+    subtitleEn: 'Past due date, immediate action required',
     badgeClass: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
     icon: AlertOctagon,
   },
   {
     id: 'today',
     label: '🔥 今日到期 Today',
+    labelEn: '🔥 Due Today',
     subtitle: '今日死线聚焦冲刺',
+    subtitleEn: 'Focus sprint for today',
     badgeClass: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
     icon: Flame,
   },
   {
     id: 'next3days',
     label: '⚡ 未来 3 天内 Next 3 Days',
+    labelEn: '⚡ Next 3 Days',
     subtitle: '近期即将到期的关键任务',
+    subtitleEn: 'Key deliverables due within 3 days',
     badgeClass: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
     icon: Clock,
   },
   {
     id: 'upcoming',
     label: '📅 远期规划 Upcoming',
+    labelEn: '📅 Upcoming',
     subtitle: '3 天以后到期的排期事项',
+    subtitleEn: 'Scheduled tasks due after 3 days',
     badgeClass: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
     icon: CalendarDays,
   },
   {
     id: 'nodate',
     label: '⏳ 未设截止日 No Date',
+    labelEn: '⏳ No Due Date',
     subtitle: '尚未锁定具体死线的任务',
+    subtitleEn: 'Tasks without a specific deadline',
     badgeClass: 'bg-slate-500/15 text-slate-600 dark:text-slate-400',
     icon: Sparkles,
   },
@@ -82,6 +95,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
   onQuickCreate,
   onStartPomodoro,
 }) => {
+  const { tr } = useI18n();
   const [subMode, setSubMode] = useState<'kanban' | 'calendar'>('kanban');
   const [hideCompleted, setHideCompleted] = useState<boolean>(false);
   const [dragOverBucket, setDragOverBucket] = useState<DueBucket | null>(null);
@@ -132,7 +146,15 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
       setCalMonth(dt.getMonth() + 1);
     };
 
-    const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const weekDays = [
+      tr('周日', 'Sun'),
+      tr('周一', 'Mon'),
+      tr('周二', 'Tue'),
+      tr('周三', 'Wed'),
+      tr('周四', 'Thu'),
+      tr('周五', 'Fri'),
+      tr('周六', 'Sat'),
+    ];
 
     return (
       <div className="flex-1 overflow-y-auto px-6 pb-6 pt-2">
@@ -141,10 +163,16 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
           <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                {calYear} 年 {calMonth} 月 · 任务截止日期排期月历
+                {tr(
+                  `${calYear} 年 ${calMonth} 月 · 任务截止日期排期月历`,
+                  `${calYear}-${String(calMonth).padStart(2, '0')} · Monthly Due Date Calendar`
+                )}
               </h3>
               <span className="text-xs text-slate-400">
-                点击任意日期格「+」可直接创建该日截止的任务
+                {tr(
+                  '点击任意日期格「+」可直接创建该日截止的任务',
+                  'Click "+" on any date cell to create a task due on that day'
+                )}
               </span>
             </div>
 
@@ -165,7 +193,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                 }}
                 className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800"
               >
-                回到今天
+                {tr('回到今天', 'Today')}
               </button>
               <button
                 type="button"
@@ -238,7 +266,10 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                         type="button"
                         onClick={() => onQuickCreate({ due_date: cell.iso })}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-indigo-500/15 text-indigo-500 transition-opacity"
-                        title={`新建 ${cell.iso} 截止的任务`}
+                        title={tr(
+                          `新建 ${cell.iso} 截止的任务`,
+                          `New task due on ${cell.iso}`
+                        )}
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -302,7 +333,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
               }`}
             >
               <Kanban className="w-3.5 h-3.5" />
-              死线时间分列看板
+              {tr('死线时间分列看板', 'Deadline Bucket Board')}
             </button>
             <button
               type="button"
@@ -314,11 +345,14 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
               }`}
             >
               <CalendarIcon className="w-3.5 h-3.5" />
-              月度排期日历视图
+              {tr('月度排期日历视图', 'Monthly Calendar View')}
             </button>
           </div>
           <span className="text-slate-400 dark:text-slate-500 hidden md:inline">
-            · 跨列或跨日期格拖拽卡片，自动同步更新任务的截止日期
+            {tr(
+              '· 跨列或跨日期格拖拽卡片，自动同步更新任务的截止日期',
+              '· Drag cards across columns or date cells to reschedule due dates'
+            )}
           </span>
         </div>
 
@@ -329,7 +363,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
             onChange={(e) => setHideCompleted(e.target.checked)}
             className="rounded border-slate-300 text-indigo-600 focus:ring-0"
           />
-          <span>隐藏已完成任务</span>
+          <span>{tr('隐藏已完成任务', 'Hide Completed Tasks')}</span>
         </label>
       </div>
 
@@ -366,14 +400,14 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                         <span
                           className={`px-2 py-0.5 rounded-md text-xs font-bold ${col.badgeClass}`}
                         >
-                          {col.label}
+                          {tr(col.label, col.labelEn)}
                         </span>
                         <span className="px-1.5 py-0.5 text-[11px] font-mono rounded bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
                           {colTasks.length}
                         </span>
                       </div>
                       <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                        {col.subtitle}
+                        {tr(col.subtitle, col.subtitleEn)}
                       </p>
                     </div>
 
@@ -385,7 +419,10 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                         })
                       }
                       className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title="在此时间段新建任务"
+                      title={tr(
+                        '在此时间段新建任务',
+                        'New task in this timeframe'
+                      )}
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -395,7 +432,10 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                   <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
                     {colTasks.length === 0 ? (
                       <div className="h-32 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-600 text-xs p-4 text-center">
-                        拖拽卡片至此自动重设截止日
+                        {tr(
+                          '拖拽卡片至此自动重设截止日',
+                          'Drag cards here to reschedule due date'
+                        )}
                       </div>
                     ) : (
                       colTasks.map((task) => (

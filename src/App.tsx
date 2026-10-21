@@ -12,6 +12,7 @@ import { DueDateBoard } from './components/boards/DueDateBoard';
 import { MemberBoard } from './components/boards/MemberBoard';
 import { ProjectBoard } from './components/boards/ProjectBoard';
 import { StatusBoard } from './components/boards/StatusBoard';
+import { useI18n } from './i18n/I18nContext';
 import type {
   BoardViewType,
   FilterState,
@@ -32,6 +33,7 @@ const INITIAL_FILTERS: FilterState = {
 };
 
 export const App: React.FC = () => {
+  const { tr } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -91,13 +93,15 @@ export const App: React.FC = () => {
       setTasks(data.tasks);
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : '加载本地 SQLite 数据失败',
+        err instanceof Error
+          ? err.message
+          : tr('加载本地 SQLite 数据失败', 'Failed to load SQLite data'),
         'error'
       );
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, tr]);
 
   useEffect(() => {
     loadBootstrap();
@@ -129,8 +133,11 @@ export const App: React.FC = () => {
       if (e.key === 'Escape') {
         if (commandOpen) setCommandOpen(false);
         else if (aiDrawerOpen) setAiDrawerOpen(false);
-        else if (modalMode) setModalMode(null);
-        else if (selectedTaskId) setSelectedTaskId(null);
+        else if (modalMode) {
+          setModalMode(null);
+          setEditingProject(null);
+          setEditingMember(null);
+        } else if (selectedTaskId) setSelectedTaskId(null);
         return;
       }
 
@@ -143,7 +150,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [commandOpen, modalMode, selectedTaskId]);
+  }, [commandOpen, aiDrawerOpen, modalMode, selectedTaskId]);
 
   const filteredTasks = useMemo(
     () => filterTasks(tasks, filters),
@@ -168,16 +175,20 @@ export const App: React.FC = () => {
         setTasks((prev) =>
           prev.map((t) => (t.id === taskId ? updated : t))
         );
-        showToast(`已同步更新 [${updated.task_key}]`);
+        showToast(
+          tr(`已同步更新 [${updated.task_key}]`, `Updated [${updated.task_key}]`)
+        );
       } catch (err) {
         showToast(
-          err instanceof Error ? err.message : '更新任务失败',
+          err instanceof Error
+            ? err.message
+            : tr('更新任务失败', 'Failed to update task'),
           'error'
         );
         loadBootstrap();
       }
     },
-    [loadBootstrap, showToast]
+    [loadBootstrap, showToast, tr]
   );
 
   const handleCreateTask = async (
@@ -198,9 +209,19 @@ export const App: React.FC = () => {
       } else {
         setTasks((prev) => [created, ...prev]);
       }
-      showToast(`已创建任务 [${created.task_key}] ${created.title}`);
+      showToast(
+        tr(
+          `已创建任务 [${created.task_key}] ${created.title}`,
+          `Created task [${created.task_key}] ${created.title}`
+        )
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '创建任务失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('创建任务失败', 'Failed to create task'),
+        'error'
+      );
     }
   };
 
@@ -209,9 +230,12 @@ export const App: React.FC = () => {
       await apiClient.deleteTask(taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
       if (selectedTaskId === taskId) setSelectedTaskId(null);
-      showToast('任务已删除');
+      showToast(tr('任务已删除', 'Task deleted'));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '删除失败', 'error');
+      showToast(
+        err instanceof Error ? err.message : tr('删除失败', 'Delete failed'),
+        'error'
+      );
     }
   };
 
@@ -224,7 +248,12 @@ export const App: React.FC = () => {
         )
       );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '添加子任务失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('添加子任务失败', 'Failed to add subtask'),
+        'error'
+      );
     }
   };
 
@@ -238,7 +267,12 @@ export const App: React.FC = () => {
         }))
       );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '更新子任务失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('更新子任务失败', 'Failed to update subtask'),
+        'error'
+      );
     }
   };
 
@@ -252,7 +286,12 @@ export const App: React.FC = () => {
         }))
       );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '删除子任务失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('删除子任务失败', 'Failed to delete subtask'),
+        'error'
+      );
     }
   };
 
@@ -270,9 +309,14 @@ export const App: React.FC = () => {
             : t
         )
       );
-      showToast('已发表协作评论');
+      showToast(tr('已发表协作评论', 'Comment posted'));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '发表评论失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('发表评论失败', 'Failed to post comment'),
+        'error'
+      );
     }
   };
 
@@ -285,9 +329,16 @@ export const App: React.FC = () => {
     try {
       const proj = await apiClient.createProject(payload);
       setProjects((prev) => [...prev, proj]);
-      showToast(`已新建项目「${proj.name}」`);
+      showToast(
+        tr(`已新建项目「${proj.name}」`, `Created project "${proj.name}"`)
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '新建项目失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('新建项目失败', 'Failed to create project'),
+        'error'
+      );
     }
   };
 
@@ -303,9 +354,16 @@ export const App: React.FC = () => {
     try {
       const updated = await apiClient.updateProject(id, payload);
       setProjects((prev) => prev.map((p) => (p.id === id ? updated : p)));
-      showToast(`已更新项目「${updated.name}」`);
+      showToast(
+        tr(`已更新项目「${updated.name}」`, `Updated project "${updated.name}"`)
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '更新项目失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('更新项目失败', 'Failed to update project'),
+        'error'
+      );
     }
   };
 
@@ -313,8 +371,14 @@ export const App: React.FC = () => {
     const taskCount = tasks.filter((t) => t.project_id === project.id).length;
     const msg =
       taskCount > 0
-        ? `确定要删除项目「${project.name}」吗？该项目下的 ${taskCount} 项关联任务也将一并删除。`
-        : `确定要删除项目「${project.name}」吗？`;
+        ? tr(
+            `确定要删除项目「${project.name}」吗？该项目下的 ${taskCount} 项关联任务也将一并删除。`,
+            `Delete project "${project.name}"? Its ${taskCount} associated task(s) will also be deleted.`
+          )
+        : tr(
+            `确定要删除项目「${project.name}」吗？`,
+            `Delete project "${project.name}"?`
+          );
     if (!window.confirm(msg)) return;
     try {
       await apiClient.deleteProject(project.id);
@@ -323,9 +387,16 @@ export const App: React.FC = () => {
       if (filters.projectId === project.id) {
         setFilters((prev) => ({ ...prev, projectId: 'all' }));
       }
-      showToast(`已删除项目「${project.name}」`);
+      showToast(
+        tr(`已删除项目「${project.name}」`, `Deleted project "${project.name}"`)
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '删除项目失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('删除项目失败', 'Failed to delete project'),
+        'error'
+      );
     }
   };
 
@@ -338,9 +409,16 @@ export const App: React.FC = () => {
     try {
       const mem = await apiClient.createMember(payload);
       setMembers((prev) => [...prev, mem]);
-      showToast(`已添加团队成员「${mem.name}」`);
+      showToast(
+        tr(`已添加团队成员「${mem.name}」`, `Added member "${mem.name}"`)
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '添加成员失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('添加成员失败', 'Failed to add member'),
+        'error'
+      );
     }
   };
 
@@ -356,16 +434,26 @@ export const App: React.FC = () => {
     try {
       const updated = await apiClient.updateMember(id, payload);
       setMembers((prev) => prev.map((m) => (m.id === id ? updated : m)));
-      showToast(`已更新成员「${updated.name}」`);
+      showToast(
+        tr(`已更新成员「${updated.name}」`, `Updated member "${updated.name}"`)
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '更新成员失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('更新成员失败', 'Failed to update member'),
+        'error'
+      );
     }
   };
 
   const handleDeleteMember = async (member: Member) => {
     if (
       !window.confirm(
-        `确定要移除成员「${member.name}」吗？（其关联的任务不会被删除，将自动转为未指派）`
+        tr(
+          `确定要移除成员「${member.name}」吗？（其关联的任务不会被删除，将自动转为未指派）`,
+          `Remove member "${member.name}"? (Their tasks will not be deleted and will become unassigned)`
+        )
       )
     ) {
       return;
@@ -383,9 +471,16 @@ export const App: React.FC = () => {
       if (filters.memberId === member.id) {
         setFilters((prev) => ({ ...prev, memberId: 'all' }));
       }
-      showToast(`已移除成员「${member.name}」`);
+      showToast(
+        tr(`已移除成员「${member.name}」`, `Removed member "${member.name}"`)
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '删除成员失败', 'error');
+      showToast(
+        err instanceof Error
+          ? err.message
+          : tr('删除成员失败', 'Failed to remove member'),
+        'error'
+      );
     }
   };
 
@@ -401,23 +496,23 @@ export const App: React.FC = () => {
     a.download = `flow-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('已导出 JSON 完整备份');
+    showToast(tr('已导出 JSON 完整备份', 'Exported full JSON backup'));
   };
 
   const handleExportCSV = () => {
     const projMap = new Map(projects.map((p) => [p.id, p.name]));
     const memMap = new Map(members.map((m) => [m.id, m.name]));
     const headers = [
-      '任务编号',
-      '任务名称',
-      '所属项目',
-      '状态',
-      '优先级',
-      '截止日期',
-      '主负责人',
-      '协同相关人员',
-      '预估工时(h)',
-      '已投入分钟',
+      tr('任务编号', 'Key'),
+      tr('任务名称', 'Title'),
+      tr('所属项目', 'Project'),
+      tr('状态', 'Status'),
+      tr('优先级', 'Priority'),
+      tr('截止日期', 'Due Date'),
+      tr('主负责人', 'Assignee'),
+      tr('协同相关人员', 'Collaborators'),
+      tr('预估工时(h)', 'Est. Hours'),
+      tr('已投入分钟', 'Logged Mins'),
     ];
     const rows = tasks.map((t) => [
       t.task_key,
@@ -425,8 +520,8 @@ export const App: React.FC = () => {
       `"${projMap.get(t.project_id) || ''}"`,
       t.status,
       t.priority,
-      t.due_date || '未排期',
-      memMap.get(t.assignee_id || '') || '未指派',
+      t.due_date || tr('未排期', 'Unscheduled'),
+      memMap.get(t.assignee_id || '') || tr('未指派', 'Unassigned'),
       `"${t.collaborator_ids
         .map((id) => memMap.get(id))
         .filter(Boolean)
@@ -443,7 +538,7 @@ export const App: React.FC = () => {
     a.download = `flow-tasks-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('已导出 CSV 表格报表');
+    showToast(tr('已导出 CSV 表格报表', 'Exported CSV report'));
   };
 
   const handleImportJSON = async (file: File) => {
@@ -454,17 +549,28 @@ export const App: React.FC = () => {
       setProjects(data.projects);
       setMembers(data.members);
       setTasks(data.tasks);
-      showToast('已从备份成功恢复全部数据');
+      showToast(
+        tr('已从备份成功恢复全部数据', 'Restored all data from JSON backup')
+      );
     } catch (err) {
       showToast(
-        err instanceof Error ? err.message : '导入 JSON 备份失败',
+        err instanceof Error
+          ? err.message
+          : tr('导入 JSON 备份失败', 'Failed to import JSON backup'),
         'error'
       );
     }
   };
 
   const handleResetDemoData = async () => {
-    if (!window.confirm('确定要清空当前工作区的所有项目、人员与任务数据吗？（AI 接口配置将保留）')) {
+    if (
+      !window.confirm(
+        tr(
+          '确定要清空当前工作区的所有项目、人员与任务数据吗？（AI 接口配置将保留）',
+          'Are you sure you want to clear all projects, members, and tasks in this workspace? (AI endpoint settings will be preserved)'
+        )
+      )
+    ) {
       return;
     }
     try {
@@ -473,9 +579,12 @@ export const App: React.FC = () => {
       setMembers(data.members);
       setTasks(data.tasks);
       setFilters(INITIAL_FILTERS);
-      showToast('已清空工作区所有数据');
+      showToast(tr('已清空工作区所有数据', 'Cleared all workspace data'));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '清空失败', 'error');
+      showToast(
+        err instanceof Error ? err.message : tr('清空失败', 'Failed to clear'),
+        'error'
+      );
     }
   };
 
@@ -544,7 +653,10 @@ export const App: React.FC = () => {
         <main className="flex-1 min-h-0 overflow-hidden">
           {loading ? (
             <div className="h-full flex items-center justify-center text-sm text-slate-400">
-              正在从本地 SQLite 数据库加载多维看板...
+              {tr(
+                '正在从本地 SQLite 数据库加载多维看板...',
+                'Loading multi-board workspace from SQLite...'
+              )}
             </div>
           ) : (
             <>

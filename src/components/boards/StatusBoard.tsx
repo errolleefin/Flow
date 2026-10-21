@@ -9,6 +9,7 @@ import {
   Plus,
 } from 'lucide-react';
 import type { Member, Project, Task, TaskStatus } from '../../types';
+import { useI18n } from '../../i18n/I18nContext';
 import { TaskCard } from '../TaskCard';
 
 interface StatusBoardProps {
@@ -24,44 +25,56 @@ interface StatusBoardProps {
 export const STATUS_COLUMNS: Array<{
   id: TaskStatus;
   label: string;
+  labelEn: string;
   accentColor: string;
   headerBg: string;
   description: string;
+  descriptionEn: string;
 }> = [
   {
     id: 'backlog',
     label: '待规划 Backlog',
+    labelEn: 'Backlog',
     accentColor: '#64748b',
     headerBg: 'bg-slate-500/10 text-slate-600 dark:text-slate-300',
     description: '需求池与待排期想法',
+    descriptionEn: 'Ideas & unscheduled backlog',
   },
   {
     id: 'todo',
     label: '待处理 Todo',
+    labelEn: 'Todo',
     accentColor: '#6366f1',
     headerBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
     description: '已明确排期、待启动',
+    descriptionEn: 'Scheduled & ready to start',
   },
   {
     id: 'in_progress',
     label: '进行中 In Progress',
+    labelEn: 'In Progress',
     accentColor: '#3b82f6',
     headerBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
     description: '正在核心推进的任务',
+    descriptionEn: 'Actively being worked on',
   },
   {
     id: 'review',
     label: '审核/阻塞 In Review',
+    labelEn: 'In Review / Blocked',
     accentColor: '#f59e0b',
     headerBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
     description: '代码评审、验收或外部阻塞',
+    descriptionEn: 'Code review, QA, or blocked',
   },
   {
     id: 'done',
     label: '已完成 Done',
+    labelEn: 'Done',
     accentColor: '#10b981',
     headerBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     description: '已闭环交付归档',
+    descriptionEn: 'Completed & delivered',
   },
 ];
 
@@ -74,6 +87,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
   onQuickCreate,
   onStartPomodoro,
 }) => {
+  const { tr } = useI18n();
   const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
   const projectMap = new Map(projects.map((p) => [p.id, p]));
 
@@ -113,6 +127,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
             0
           );
           const isOver = dragOverCol === col.id;
+          const colLabel = tr(col.label, col.labelEn);
 
           return (
             <div
@@ -136,14 +151,14 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                        {col.label}
+                        {colLabel}
                       </h3>
                       <span className="px-1.5 py-0.5 text-[11px] font-mono font-semibold rounded-md bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
                         {colTasks.length}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                      {col.description}
+                      {tr(col.description, col.descriptionEn)}
                     </p>
                   </div>
                 </div>
@@ -151,7 +166,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
                 <div className="flex items-center gap-1.5">
                   <span
                     className="inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-400 dark:text-slate-500"
-                    title="本列预估总工时"
+                    title={tr('本列预估总工时', 'Total estimated hours in column')}
                   >
                     <Clock className="w-3 h-3" />
                     {totalHours}h
@@ -160,7 +175,10 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
                     type="button"
                     onClick={() => onQuickCreate({ status: col.id })}
                     className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                    title={`在「${col.label}」下新建任务`}
+                    title={tr(
+                      `在「${colLabel}」下新建任务`,
+                      `New task in "${colLabel}"`
+                    )}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -171,13 +189,18 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
               <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
                 {colTasks.length === 0 ? (
                   <div className="h-36 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 text-xs p-4 text-center">
-                    <span>拖拽卡片至此列自动更新状态</span>
+                    <span>
+                      {tr(
+                        '拖拽卡片至此列自动更新状态',
+                        'Drag cards here to update status'
+                      )}
+                    </span>
                     <button
                       type="button"
                       onClick={() => onQuickCreate({ status: col.id })}
                       className="mt-2 text-indigo-500 hover:underline text-[11px] font-medium"
                     >
-                      + 添加首条任务
+                      {tr('+ 添加首条任务', '+ Add first task')}
                     </button>
                   </div>
                 ) : (

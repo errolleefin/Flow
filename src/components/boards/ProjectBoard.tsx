@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, CheckCircle2, FolderPlus, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { Member, Project, Task } from '../../types';
 import { getDueStatus } from '../../utils/dateUtils';
+import { useI18n } from '../../i18n/I18nContext';
 import { TaskCard } from '../TaskCard';
 
 interface ProjectBoardProps {
@@ -29,6 +30,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   onDeleteProject,
   onStartPomodoro,
 }) => {
+  const { tr } = useI18n();
   const [dragOverProj, setDragOverProj] = useState<string | null>(null);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, projectId: string) => {
@@ -109,7 +111,10 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       type="button"
                       onClick={() => onEditProject(proj)}
                       className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title={`编辑项目「${proj.name}」`}
+                      title={tr(
+                        `编辑项目「${proj.name}」`,
+                        `Edit project "${proj.name}"`
+                      )}
                     >
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
@@ -117,7 +122,10 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       type="button"
                       onClick={() => onDeleteProject(proj)}
                       className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title={`删除项目「${proj.name}」`}
+                      title={tr(
+                        `删除项目「${proj.name}」`,
+                        `Delete project "${proj.name}"`
+                      )}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -125,7 +133,10 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       type="button"
                       onClick={() => onQuickCreate({ project_id: proj.id })}
                       className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title={`在「${proj.name}」下新建任务`}
+                      title={tr(
+                        `在「${proj.name}」下新建任务`,
+                        `New task in "${proj.name}"`
+                      )}
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -137,12 +148,15 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400">
                       <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                      完成进度 {doneCount}/{projTasks.length} ({progressPct}%)
+                      {tr(
+                        `完成进度 ${doneCount}/${projTasks.length} (${progressPct}%)`,
+                        `Progress ${doneCount}/${projTasks.length} (${progressPct}%)`
+                      )}
                     </span>
                     {overdueCount > 0 && (
                       <span className="inline-flex items-center gap-1 text-rose-500 font-semibold">
                         <AlertTriangle className="w-3 h-3" />
-                        {overdueCount} 逾期
+                        {tr(`${overdueCount} 逾期`, `${overdueCount} Overdue`)}
                       </span>
                     )}
                   </div>
@@ -162,13 +176,18 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
               <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
                 {projTasks.length === 0 ? (
                   <div className="h-36 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 text-xs p-4 text-center">
-                    <span>将任意卡片拖入此列即可归属至该项目</span>
+                    <span>
+                      {tr(
+                        '将任意卡片拖入此列即可归属至该项目',
+                        'Drag any card here to assign to this project'
+                      )}
+                    </span>
                     <button
                       type="button"
                       onClick={() => onQuickCreate({ project_id: proj.id })}
                       className="mt-2 text-indigo-500 hover:underline text-[11px] font-medium"
                     >
-                      + 新建该项目任务
+                      {tr('+ 新建该项目任务', '+ New project task')}
                     </button>
                   </div>
                 ) : (
@@ -201,7 +220,9 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           className="w-64 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 dark:hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors bg-white/40 dark:bg-slate-900/30"
         >
           <FolderPlus className="w-6 h-6" />
-          <span className="text-xs font-semibold">+ 新建项目看板列</span>
+          <span className="text-xs font-semibold">
+            {tr('+ 新建项目看板列', '+ New Project Column')}
+          </span>
         </button>
       </div>
     </div>

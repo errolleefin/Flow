@@ -43,7 +43,7 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 - **Keyboard-First Navigation**: Press `Ctrl/Cmd + K` for the global Command Palette, `N` for quick task creation, `Ctrl/Cmd + J` to toggle the AI Assistant, and `Esc` to dismiss active drawers or modals.
 - **Rich Task Detail Drawer**: Break down tasks into subtasks with progress tracking, assign multiple collaborators, manage custom tags, post team comments, and review automated activity audit logs.
 - **Built-in Pomodoro Focus Timer**: Floating 25-minute focus timer that automatically logs completed focus sessions into a task's actual time spent.
-- **Dual Theme & Full Data Sovereignty**: Switch seamlessly between Crisp Light and Linear Dark themes, export/import full workspace backups via JSON, or export task reports to CSV.
+- **Dual Theme, Bilingual UI & Full Data Sovereignty**: Switch seamlessly between Crisp Light and Linear Dark themes, toggle the entire workspace UI between **Simplified Chinese (`中文`) and English (`EN`)** with one click, export/import full workspace backups via JSON, or export task reports to CSV.
 
 ---
 

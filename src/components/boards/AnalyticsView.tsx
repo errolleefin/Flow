@@ -3,15 +3,14 @@ import {
   AlertTriangle,
   Award,
   CheckCircle2,
-  Clock,
   Flame,
   FolderKanban,
-  Layers,
   Timer,
   Users,
 } from 'lucide-react';
 import type { Member, Project, Task } from '../../types';
 import { formatDueLabel, getDueStatus } from '../../utils/dateUtils';
+import { useI18n } from '../../i18n/I18nContext';
 import { PRIORITY_CONFIG } from '../TaskCard';
 
 interface AnalyticsViewProps {
@@ -27,6 +26,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   members,
   onSelectTask,
 }) => {
+  const { lang, tr } = useI18n();
   const totalTasks = tasks.length;
   const doneTasks = tasks.filter((t) => t.status === 'done').length;
   const inProgressTasks = tasks.filter((t) => t.status === 'in_progress').length;
@@ -72,7 +72,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              全局任务交付率
+              {tr('全局任务交付率', 'Overall Delivery Rate')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4" />
@@ -83,7 +83,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               {completionRate}%
             </span>
             <span className="text-xs text-slate-400">
-              已完成 {doneTasks} / 共 {totalTasks} 项
+              {tr(
+                `已完成 ${doneTasks} / 共 ${totalTasks} 项`,
+                `${doneTasks} done / ${totalTasks} total`
+              )}
             </span>
           </div>
           <div className="mt-3 w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -97,7 +100,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              死线预警与今日到期
+              {tr('死线预警与今日到期', 'Overdue & Due Today')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-500 flex items-center justify-center">
               <AlertTriangle className="w-4 h-4" />
@@ -108,25 +111,32 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               <span className="text-2xl font-bold text-rose-500">
                 {overdueTasks.length}
               </span>
-              <span className="text-xs text-slate-400 ml-1">已逾期</span>
+              <span className="text-xs text-slate-400 ml-1">
+                {tr('已逾期', 'Overdue')}
+              </span>
             </div>
             <div className="text-slate-300 dark:text-slate-700">|</div>
             <div>
               <span className="text-2xl font-bold text-amber-500">
                 {dueTodayTasks.length}
               </span>
-              <span className="text-xs text-slate-400 ml-1">今日到期</span>
+              <span className="text-xs text-slate-400 ml-1">
+                {tr('今日到期', 'Due Today')}
+              </span>
             </div>
           </div>
           <p className="mt-2.5 text-[11px] text-slate-400">
-            进行中核心任务共 {inProgressTasks} 项
+            {tr(
+              `进行中核心任务共 ${inProgressTasks} 项`,
+              `${inProgressTasks} active tasks in progress`
+            )}
           </p>
         </div>
 
         <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              专注工时投入 vs 预估
+              {tr('专注工时投入 vs 预估', 'Focus Hours vs. Estimated')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center">
               <Timer className="w-4 h-4" />
@@ -137,18 +147,24 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               {totalLoggedHours}h
             </span>
             <span className="text-xs text-slate-400">
-              / 预估总计 {totalEstimateHours}h
+              {tr(
+                `/ 预估总计 ${totalEstimateHours}h`,
+                `/ ${totalEstimateHours}h estimated`
+              )}
             </span>
           </div>
           <p className="mt-2.5 text-[11px] text-slate-400">
-            通过番茄钟与工时记录自动汇总
+            {tr(
+              '通过番茄钟与工时记录自动汇总',
+              'Aggregated from Pomodoro & time logs'
+            )}
           </p>
         </div>
 
         <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              活跃项目与团队规模
+              {tr('活跃项目与团队规模', 'Active Projects & Team Size')}
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
               <Award className="w-4 h-4" />
@@ -159,18 +175,25 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               <span className="text-2xl font-bold text-slate-900 dark:text-white">
                 {projects.length}
               </span>
-              <span className="text-xs text-slate-400 ml-1">个项目</span>
+              <span className="text-xs text-slate-400 ml-1">
+                {tr('个项目', 'Projects')}
+              </span>
             </div>
             <div className="text-slate-300 dark:text-slate-700">|</div>
             <div>
               <span className="text-2xl font-bold text-slate-900 dark:text-white">
                 {members.length}
               </span>
-              <span className="text-xs text-slate-400 ml-1">位相关人员</span>
+              <span className="text-xs text-slate-400 ml-1">
+                {tr('位相关人员', 'Members')}
+              </span>
             </div>
           </div>
           <p className="mt-2.5 text-[11px] text-slate-400">
-            跨职能多人员协作实时联动
+            {tr(
+              '跨职能多人员协作实时联动',
+              'Cross-functional collaboration synced in real time'
+            )}
           </p>
         </div>
       </div>
@@ -183,10 +206,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <div className="flex items-center gap-2">
               <FolderKanban className="w-4 h-4 text-indigo-500" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                各项目交付健康度与进度对比
+                {tr(
+                  '各项目交付健康度与进度对比',
+                  'Project Delivery Health & Progress'
+                )}
               </h3>
             </div>
-            <span className="text-xs text-slate-400">按项目名维度聚合</span>
+            <span className="text-xs text-slate-400">
+              {tr('按项目名维度聚合', 'Grouped by project')}
+            </span>
           </div>
 
           <div className="space-y-4">
@@ -218,10 +246,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                     <div className="flex items-center gap-3 text-[11px] text-slate-500">
                       {pOverdue > 0 && (
                         <span className="text-rose-500 font-semibold">
-                          {pOverdue} 逾期
+                          {tr(`${pOverdue} 逾期`, `${pOverdue} Overdue`)}
                         </span>
                       )}
-                      <span>推进中 {pActive}</span>
+                      <span>
+                        {tr(`推进中 ${pActive}`, `${pActive} Active`)}
+                      </span>
                       <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
                         {pct}% ({pDone}/{pTasks.length})
                       </span>
@@ -248,10 +278,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-emerald-500" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                相关人员工作负载与协同排行
+                {tr(
+                  '相关人员工作负载与协同排行',
+                  'Team Workload & Collaboration Ranking'
+                )}
               </h3>
             </div>
-            <span className="text-xs text-slate-400">主负责工时 + 协同参与数</span>
+            <span className="text-xs text-slate-400">
+              {tr('主负责工时 + 协同参与数', 'Assigned hours + collaborations')}
+            </span>
           </div>
 
           <div className="space-y-3.5">
@@ -292,8 +327,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center gap-2.5 text-[11px] text-slate-500">
-                      <span>协同 {collabCount} 项</span>
-                      <span>已交付 {assignedDone} 项</span>
+                      <span>
+                        {tr(`协同 ${collabCount} 项`, `${collabCount} Collab`)}
+                      </span>
+                      <span>
+                        {tr(
+                          `已交付 ${assignedDone} 项`,
+                          `${assignedDone} Done`
+                        )}
+                      </span>
                       <span
                         className={`font-mono font-bold ${
                           pct > 100
@@ -332,11 +374,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-rose-500" />
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              高优与近期死线重点关注任务雷达
+              {tr(
+                '高优与近期死线重点关注任务雷达',
+                'High-Priority & Immediate Deadline Radar'
+              )}
             </h3>
           </div>
           <span className="text-xs text-slate-400">
-            点击任意行可直接打开任务详情抽屉编辑
+            {tr(
+              '点击任意行可直接打开任务详情抽屉编辑',
+              'Click any row to open the task detail drawer'
+            )}
           </span>
         </div>
 
@@ -344,12 +392,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-semibold">
-                <th className="py-2.5 px-3">编号</th>
-                <th className="py-2.5 px-3">任务名称</th>
-                <th className="py-2.5 px-3">所属项目</th>
-                <th className="py-2.5 px-3">相关人员 (负责人 / 协作人)</th>
-                <th className="py-2.5 px-3">优先级</th>
-                <th className="py-2.5 px-3">截止日期</th>
+                <th className="py-2.5 px-3">{tr('编号', 'Key')}</th>
+                <th className="py-2.5 px-3">{tr('任务名称', 'Task Title')}</th>
+                <th className="py-2.5 px-3">{tr('所属项目', 'Project')}</th>
+                <th className="py-2.5 px-3">
+                  {tr(
+                    '相关人员 (负责人 / 协作人)',
+                    'Personnel (Assignee / Collaborators)'
+                  )}
+                </th>
+                <th className="py-2.5 px-3">{tr('优先级', 'Priority')}</th>
+                <th className="py-2.5 px-3">{tr('截止日期', 'Due Date')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -400,12 +453,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                             {assignee.name}
                           </span>
                         ) : (
-                          <span className="text-slate-400">未指派</span>
+                          <span className="text-slate-400">
+                            {tr('未指派', 'Unassigned')}
+                          </span>
                         )}
                         {collabs.length > 0 && (
                           <span className="text-[11px] text-slate-400">
-                            + 协同:{' '}
-                            {collabs.map((c) => c?.name).join('、')}
+                            + {tr('协同:', 'Collab:')}{' '}
+                            {collabs.map((c) => c?.name).join(', ')}
                           </span>
                         )}
                       </div>
@@ -414,7 +469,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${pConf.badgeClass}`}
                       >
-                        {pConf.label}
+                        {tr(pConf.label, pConf.labelEn)}
                       </span>
                     </td>
                     <td className="py-2.5 px-3">
@@ -427,7 +482,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                             : 'text-slate-500'
                         }`}
                       >
-                        {formatDueLabel(t.due_date)} ({t.due_date || '-'})
+                        {formatDueLabel(t.due_date, undefined, lang)} (
+                        {t.due_date || '-'})
                       </span>
                     </td>
                   </tr>

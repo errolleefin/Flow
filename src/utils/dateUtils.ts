@@ -71,10 +71,21 @@ export function getDateForBucket(
 
 export function formatDueLabel(
   dueDate: string | null | undefined,
-  refDate: string = getTodayISO()
+  refDate: string = getTodayISO(),
+  lang: 'zh' | 'en' = 'zh'
 ): string {
-  if (!dueDate || !dueDate.trim()) return '未设截止日';
+  if (!dueDate || !dueDate.trim()) {
+    return lang === 'en' ? 'No due date' : '未设截止日';
+  }
   const diff = diffDaysISO(dueDate, refDate);
+  if (lang === 'en') {
+    if (diff === 0) return 'Due today';
+    if (diff === 1) return 'Due tomorrow';
+    if (diff === 2) return 'In 2 days';
+    if (diff > 2 && diff <= 7) return `In ${diff}d (${dueDate.slice(5)})`;
+    if (diff < 0) return `${Math.abs(diff)}d overdue`;
+    return dueDate;
+  }
   if (diff === 0) return '今天到期';
   if (diff === 1) return '明天到期';
   if (diff === 2) return '后天到期';

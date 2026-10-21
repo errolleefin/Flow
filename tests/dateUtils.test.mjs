@@ -40,11 +40,16 @@ test('getDateForBucket returns appropriate target ISO date when dragging across 
   assert.equal(getDateForBucket('nodate', refDate), null);
 });
 
-test('formatDueLabel produces human-readable Chinese relative labels', () => {
+test('formatDueLabel produces human-readable Chinese and English relative labels', () => {
   const refDate = '2026-10-21';
 
   assert.equal(formatDueLabel('2026-10-21', refDate), '今天到期');
   assert.equal(formatDueLabel('2026-10-22', refDate), '明天到期');
   assert.equal(formatDueLabel('2026-10-19', refDate), '逾期 2 天');
   assert.equal(formatDueLabel(null, refDate), '未设截止日');
+
+  assert.equal(formatDueLabel('2026-10-21', refDate, 'en'), 'Due today');
+  assert.equal(formatDueLabel('2026-10-22', refDate, 'en'), 'Due tomorrow');
+  assert.equal(formatDueLabel('2026-10-19', refDate, 'en'), '2d overdue');
+  assert.equal(formatDueLabel(null, refDate, 'en'), 'No due date');
 });

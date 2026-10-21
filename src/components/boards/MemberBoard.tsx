@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Pencil, Plus, Trash2, UserCheck, UserPlus, Users } from 'lucide-react';
 import type { Member, Project, Task } from '../../types';
+import { useI18n } from '../../i18n/I18nContext';
 import { TaskCard } from '../TaskCard';
 
 interface MemberBoardProps {
@@ -28,6 +29,7 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
   onDeleteMember,
   onStartPomodoro,
 }) => {
+  const { tr } = useI18n();
   const [dragOverMember, setDragOverMember] = useState<string | null>(null);
   const [showCollaboratedInColumn, setShowCollaboratedInColumn] = useState<boolean>(false);
   const projectMap = new Map(projects.map((p) => [p.id, p]));
@@ -49,7 +51,10 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
       <div className="px-6 pt-3 pb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-3">
           <span className="text-slate-500 dark:text-slate-400">
-            💡 跨列拖拽卡片可直接<strong>改派主负责人</strong>；负载水位按成员未完成任务预估工时 / 周容量计算
+            {tr(
+              '💡 跨列拖拽卡片可直接改派主负责人；负载水位按成员未完成任务预估工时 / 周容量计算',
+              '💡 Drag cards across columns to reassign the primary owner; saturation = active est. hours / weekly capacity'
+            )}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -64,8 +69,14 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
           >
             <UserCheck className="w-3.5 h-3.5" />
             {showCollaboratedInColumn
-              ? '当前：展示主负责 + 协同参与任务'
-              : '当前：仅按主负责人归列（点击含协同任务）'}
+              ? tr(
+                  '当前：展示主负责 + 协同参与任务',
+                  'Showing: Primary + Collaborated Tasks'
+                )
+              : tr(
+                  '当前：仅按主负责人归列（点击含协同任务）',
+                  'Showing: Primary Assignee Only (Click to include collaborated)'
+                )}
           </button>
         </div>
       </div>
@@ -98,10 +109,22 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
 
             const loadStatus =
               loadPct > 100
-                ? { label: '超载预警', bar: 'bg-rose-500', text: 'text-rose-500' }
+                ? {
+                    label: tr('超载预警', 'Overloaded'),
+                    bar: 'bg-rose-500',
+                    text: 'text-rose-500',
+                  }
                 : loadPct >= 70
-                ? { label: '负载饱满', bar: 'bg-amber-500', text: 'text-amber-500' }
-                : { label: '余量充裕', bar: 'bg-emerald-500', text: 'text-emerald-500' };
+                ? {
+                    label: tr('负载饱满', 'Near Capacity'),
+                    bar: 'bg-amber-500',
+                    text: 'text-amber-500',
+                  }
+                : {
+                    label: tr('余量充裕', 'Optimal'),
+                    bar: 'bg-emerald-500',
+                    text: 'text-emerald-500',
+                  };
 
             const isOver = dragOverMember === mem.id;
 
@@ -149,7 +172,10 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                         type="button"
                         onClick={() => onEditMember(mem)}
                         className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                        title={`编辑成员「${mem.name}」`}
+                        title={tr(
+                          `编辑成员「${mem.name}」`,
+                          `Edit member "${mem.name}"`
+                        )}
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -157,7 +183,10 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                         type="button"
                         onClick={() => onDeleteMember(mem)}
                         className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                        title={`删除成员「${mem.name}」`}
+                        title={tr(
+                          `删除成员「${mem.name}」`,
+                          `Delete member "${mem.name}"`
+                        )}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -165,7 +194,10 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                         type="button"
                         onClick={() => onQuickCreate({ assignee_id: mem.id })}
                         className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                        title={`指派新任务给 ${mem.name}`}
+                        title={tr(
+                          `指派新任务给 ${mem.name}`,
+                          `Assign new task to ${mem.name}`
+                        )}
                       >
                         <Plus className="w-4 h-4" />
                       </button>
@@ -177,7 +209,10 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400">
                         <Clock className="w-3 h-3" />
-                        在途工时 {activeHours}h / {capacity}h
+                        {tr(
+                          `在途工时 ${activeHours}h / ${capacity}h`,
+                          `Active ${activeHours}h / ${capacity}h`
+                        )}
                       </span>
                       <span className={`font-semibold ${loadStatus.text}`}>
                         {loadStatus.label} ({loadPct}%)
@@ -191,7 +226,10 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                     </div>
                     {collabCount > 0 && (
                       <div className="text-[10px] text-slate-400 dark:text-slate-500">
-                        另作为协同相关人员参与 {collabCount} 项进行中任务
+                        {tr(
+                          `另作为协同相关人员参与 ${collabCount} 项进行中任务`,
+                          `Also collaborating on ${collabCount} active task(s)`
+                        )}
                       </div>
                     )}
                   </div>
@@ -201,7 +239,12 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                 <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
                   {memTasks.length === 0 ? (
                     <div className="h-32 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 text-xs p-4 text-center">
-                      <span>拖拽任务卡片至此指派给 {mem.name}</span>
+                      <span>
+                        {tr(
+                          `拖拽任务卡片至此指派给 ${mem.name}`,
+                          `Drag task cards here to assign to ${mem.name}`
+                        )}
+                      </span>
                     </div>
                   ) : (
                     memTasks.map((task) => (
@@ -243,7 +286,7 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-slate-400" />
                 <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  待认领 / 未指派
+                  {tr('待认领 / 未指派', 'Unassigned')}
                 </h3>
               </div>
               <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-white dark:bg-slate-800 text-slate-500">
@@ -278,7 +321,9 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
             className="w-60 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors"
           >
             <UserPlus className="w-6 h-6" />
-            <span className="text-xs font-semibold">+ 新增相关人员列</span>
+            <span className="text-xs font-semibold">
+              {tr('+ 新增相关人员列', '+ New Member Column')}
+            </span>
           </button>
         </div>
       </div>

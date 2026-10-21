@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { Member, Project, Task, TaskPriority } from '../types';
 import { formatDueLabel, getDueStatus } from '../utils/dateUtils';
+import { useI18n } from '../i18n/I18nContext';
 
 interface TaskCardProps {
   task: Task;
@@ -25,28 +26,32 @@ interface TaskCardProps {
 
 export const PRIORITY_CONFIG: Record<
   TaskPriority,
-  { label: string; badgeClass: string; dotColor: string }
+  { label: string; labelEn: string; badgeClass: string; dotColor: string }
 > = {
   urgent: {
     label: '紧急',
+    labelEn: 'Urgent',
     badgeClass:
       'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
     dotColor: 'bg-rose-500',
   },
   high: {
     label: '高优',
+    labelEn: 'High',
     badgeClass:
       'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
     dotColor: 'bg-amber-500',
   },
   medium: {
     label: '普通',
+    labelEn: 'Medium',
     badgeClass:
       'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
     dotColor: 'bg-indigo-500',
   },
   low: {
     label: '较低',
+    labelEn: 'Low',
     badgeClass:
       'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30',
     dotColor: 'bg-slate-400',
@@ -62,13 +67,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onStartPomodoro,
   hideProjectBadge = false,
 }) => {
+  const { lang, tr } = useI18n();
   const dueStatus = getDueStatus(task.due_date, task.status);
-  const dueLabel = formatDueLabel(task.due_date);
+  const dueLabel = formatDueLabel(task.due_date, undefined, lang);
   const priorityInfo = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
 
   const assignee = members.find((m) => m.id === task.assignee_id);
-  const collaborators = members.filter((m) =>
-    task.collaborator_ids.includes(m.id) && m.id !== task.assignee_id
+  const collaborators = members.filter(
+    (m) => task.collaborator_ids.includes(m.id) && m.id !== task.assignee_id
   );
 
   const completedSubtasks = task.subtasks.filter((s) => s.completed).length;
@@ -124,7 +130,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 color: project.color,
                 border: `1px solid ${project.color}35`,
               }}
-              title={`项目：${project.name}`}
+              title={tr(`项目：${project.name}`, `Project: ${project.name}`)}
             >
               <span
                 className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -144,7 +150,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             ) : (
               <span className={`w-1.5 h-1.5 rounded-full ${priorityInfo.dotColor}`} />
             )}
-            {priorityInfo.label}
+            {tr(priorityInfo.label, priorityInfo.labelEn)}
           </span>
         </div>
       </div>
@@ -158,7 +164,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             onToggleDone(task);
           }}
           className="mt-0.5 text-slate-400 hover:text-indigo-500 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors shrink-0"
-          title={task.status === 'done' ? '标记为未完成' : '快速标记完成'}
+          title={
+            task.status === 'done'
+              ? tr('标记为未完成', 'Mark as incomplete')
+              : tr('快速标记完成', 'Mark as done')
+          }
         >
           {task.status === 'done' ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -197,7 +207,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
             <span className="inline-flex items-center gap-1">
               <ListChecks className="w-3 h-3 text-indigo-500" />
-              子任务进度
+              {tr('子任务进度', 'Subtasks')}
             </span>
             <span className="font-mono">
               {completedSubtasks}/{totalSubtasks} ({subtaskPct}%)
@@ -220,7 +230,11 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         <div className="flex items-center gap-1.5 min-w-0">
           <span
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border ${dueBadgeClasses[dueStatus]}`}
-            title={task.due_date ? `截止日期：${task.due_date}` : '未设置截止日期'}
+            title={
+              task.due_date
+                ? tr(`截止日期：${task.due_date}`, `Due Date: ${task.due_date}`)
+                : tr('未设置截止日期', 'No due date set')
+            }
           >
             <Calendar className="w-3 h-3 shrink-0" />
             <span className="truncate">{dueLabel}</span>
@@ -243,7 +257,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               onStartPomodoro(task);
             }}
             className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 transition-all"
-            title="开启专注番茄钟计时"
+            title={tr('开启专注番茄钟计时', 'Start Pomodoro focus timer')}
           >
             <Play className="w-3.5 h-3.5 fill-current" />
           </button>
@@ -251,7 +265,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {task.estimate_hours > 0 && (
             <span
               className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-400 dark:text-slate-500"
-              title={`预估 ${task.estimate_hours}h / 已投入 ${Math.round(task.logged_minutes / 60 * 10) / 10}h`}
+              title={tr(
+                `预估 ${task.estimate_hours}h / 已投入 ${Math.round((task.logged_minutes / 60) * 10) / 10}h`,
+                `Est. ${task.estimate_hours}h / Logged ${Math.round((task.logged_minutes / 60) * 10) / 10}h`
+              )}
             >
               <Clock className="w-2.5 h-2.5" />
               {task.estimate_hours}h
@@ -263,14 +280,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             {assignee ? (
               <div
                 className={`w-6 h-6 rounded-full bg-gradient-to-br ${assignee.avatar_bg} text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#131924] shadow-sm`}
-                title={`主负责人：${assignee.name} (${assignee.role})`}
+                title={tr(
+                  `主负责人：${assignee.name} (${assignee.role})`,
+                  `Assignee: ${assignee.name} (${assignee.role})`
+                )}
               >
                 {assignee.name.slice(0, 1)}
               </div>
             ) : (
               <div
                 className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 text-[10px] flex items-center justify-center ring-2 ring-white dark:ring-[#131924]"
-                title="未指派主负责人"
+                title={tr('未指派主负责人', 'Unassigned')}
               >
                 <Users className="w-3 h-3" />
               </div>
@@ -280,7 +300,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               <div
                 key={collab.id}
                 className={`w-5 h-5 rounded-full bg-gradient-to-br ${collab.avatar_bg} text-white text-[9px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#131924] opacity-90`}
-                title={`协作相关人员：${collab.name} (${collab.role})`}
+                title={tr(
+                  `协作相关人员：${collab.name} (${collab.role})`,
+                  `Collaborator: ${collab.name} (${collab.role})`
+                )}
               >
                 {collab.name.slice(0, 1)}
               </div>
@@ -289,7 +312,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             {collaborators.length > 2 && (
               <div
                 className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[9px] font-mono flex items-center justify-center ring-2 ring-white dark:ring-[#131924]"
-                title={`还有 ${collaborators.length - 2} 位协作人员`}
+                title={tr(
+                  `还有 ${collaborators.length - 2} 位协作人员`,
+                  `+${collaborators.length - 2} more collaborators`
+                )}
               >
                 +{collaborators.length - 2}
               </div>

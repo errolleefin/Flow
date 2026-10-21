@@ -8,6 +8,7 @@ import type {
   TaskStatus,
 } from '../types';
 import { getTodayISO } from '../utils/dateUtils';
+import { useI18n } from '../i18n/I18nContext';
 
 export type ModalMode = 'task' | 'project' | 'member' | null;
 
@@ -73,11 +74,11 @@ const PROJECT_COLORS = [
 ];
 
 const AVATAR_GRADIENTS = [
-  { label: '靛蓝紫', value: 'from-indigo-500 to-purple-600' },
-  { label: '翡翠绿', value: 'from-emerald-500 to-teal-600' },
-  { label: '深海蓝', value: 'from-blue-500 to-cyan-600' },
-  { label: '珊瑚粉', value: 'from-rose-500 to-pink-600' },
-  { label: '琥珀橙', value: 'from-amber-500 to-orange-600' },
+  { label: '靛蓝紫', labelEn: 'Indigo', value: 'from-indigo-500 to-purple-600' },
+  { label: '翡翠绿', labelEn: 'Emerald', value: 'from-emerald-500 to-teal-600' },
+  { label: '深海蓝', labelEn: 'Ocean', value: 'from-blue-500 to-cyan-600' },
+  { label: '珊瑚粉', labelEn: 'Coral', value: 'from-rose-500 to-pink-600' },
+  { label: '琥珀橙', labelEn: 'Amber', value: 'from-amber-500 to-orange-600' },
 ];
 
 export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
@@ -96,6 +97,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   onUpdateMember,
   onDeleteMember,
 }) => {
+  const { tr } = useI18n();
   // Task form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -107,7 +109,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [collaboratorIds, setCollaboratorIds] = useState<string[]>([]);
   const [estimateHours, setEstimateHours] = useState<number>(4);
-  const [tagsText, setTagsText] = useState<string>('核心交付');
+  const [tagsText, setTagsText] = useState<string>('');
   const [subtasksText, setSubtasksText] = useState<string>('');
 
   // Project form state
@@ -127,6 +129,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       setTitle('');
       setDescription('');
       setProjectId(defaults?.project_id || projects[0]?.id || '');
+      setInlineProjectName(tr('默认工作项目', 'Default Project'));
       setStatus(defaults?.status || 'todo');
       setPriority(defaults?.priority || 'medium');
       setDueDate(
@@ -154,17 +157,17 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     } else if (mode === 'member') {
       if (editingMember) {
         setMemName(editingMember.name);
-        setMemRole(editingMember.role || '团队成员');
+        setMemRole(editingMember.role || tr('团队成员', 'Team Member'));
         setMemAvatarBg(editingMember.avatar_bg || AVATAR_GRADIENTS[0].value);
         setMemCapacity(editingMember.capacity_hours || 40);
       } else {
         setMemName('');
-        setMemRole('全栈研发工程师');
+        setMemRole(tr('全栈研发工程师', 'Full-Stack Engineer'));
         setMemAvatarBg(AVATAR_GRADIENTS[0].value);
         setMemCapacity(40);
       }
     }
-  }, [mode, defaults, editingProject, editingMember, projects, members]);
+  }, [mode, defaults, editingProject, editingMember, projects, members, tr]);
 
   if (!mode) return null;
 
@@ -190,7 +193,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       title: title.trim(),
       description: description.trim(),
       project_id: projectId,
-      project_name: projects.length === 0 ? inlineProjectName.trim() || '默认工作项目' : undefined,
+      project_name:
+        projects.length === 0
+          ? inlineProjectName.trim() || tr('默认工作项目', 'Default Project')
+          : undefined,
       status,
       priority,
       due_date: dueDate || null,
@@ -230,7 +236,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     if (!memName.trim()) return;
     const payload = {
       name: memName.trim(),
-      role: memRole.trim() || '团队成员',
+      role: memRole.trim() || tr('团队成员', 'Team Member'),
       avatar_bg: memAvatarBg,
       capacity_hours: memCapacity,
     };
@@ -253,7 +259,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               <>
                 <Plus className="w-4 h-4 text-indigo-500" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  新建工作 Todo 任务
+                  {tr('新建工作 Todo 任务', 'Create Work Todo Task')}
                 </h3>
               </>
             )}
@@ -265,7 +271,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   <FolderPlus className="w-4 h-4 text-emerald-500" />
                 )}
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  {editingProject ? `编辑项目：${editingProject.name}` : '新建项目看板维度'}
+                  {editingProject
+                    ? tr(
+                        `编辑项目：${editingProject.name}`,
+                        `Edit Project: ${editingProject.name}`
+                      )
+                    : tr('新建项目看板维度', 'Create New Project')}
                 </h3>
               </>
             )}
@@ -277,7 +288,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   <UserPlus className="w-4 h-4 text-amber-500" />
                 )}
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  {editingMember ? `编辑成员：${editingMember.name}` : '新增团队相关人员'}
+                  {editingMember
+                    ? tr(
+                        `编辑成员：${editingMember.name}`,
+                        `Edit Member: ${editingMember.name}`
+                      )
+                    : tr('新增团队相关人员', 'Add Team Member')}
                 </h3>
               </>
             )}
@@ -296,7 +312,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           <form onSubmit={handleTaskSubmit} className="p-6 space-y-4 text-xs">
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                任务名称 *
+                {tr('任务名称 *', 'Task Title *')}
               </label>
               <input
                 type="text"
@@ -304,7 +320,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 autoFocus
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="例如：完成 Q4 核心支付链路压测与监控接入"
+                placeholder={tr(
+                  '例如：完成 Q4 核心支付链路压测与监控接入',
+                  'e.g., Complete Q4 core payment pipeline load testing & monitoring'
+                )}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -312,7 +331,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                  所属项目名 *
+                  {tr('所属项目名 *', 'Project *')}
                 </label>
                 {projects.length > 0 ? (
                   <select
@@ -332,7 +351,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     required
                     value={inlineProjectName}
                     onChange={(e) => setInlineProjectName(e.target.value)}
-                    placeholder="输入首个项目名称（将自动创建）"
+                    placeholder={tr(
+                      '输入首个项目名称（将自动创建）',
+                      'Enter first project name (auto-created)'
+                    )}
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                   />
                 )}
@@ -340,7 +362,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                  截止日期
+                  {tr('截止日期', 'Due Date')}
                 </label>
                 <input
                   type="date"
@@ -352,14 +374,14 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                  主负责人
+                  {tr('主负责人', 'Primary Assignee')}
                 </label>
                 <select
                   value={assigneeId}
                   onChange={(e) => setAssigneeId(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                 >
-                  <option value="">暂不指派</option>
+                  <option value="">{tr('暂不指派', 'Unassigned')}</option>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.name} ({m.role})
@@ -371,23 +393,25 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                    初始状态
+                    {tr('初始状态', 'Initial Status')}
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as TaskStatus)}
                     className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                   >
-                    <option value="backlog">待规划</option>
-                    <option value="todo">待处理</option>
-                    <option value="in_progress">进行中</option>
-                    <option value="review">审核/阻塞</option>
-                    <option value="done">已完成</option>
+                    <option value="backlog">{tr('待规划', 'Backlog')}</option>
+                    <option value="todo">{tr('待处理', 'Todo')}</option>
+                    <option value="in_progress">
+                      {tr('进行中', 'In Progress')}
+                    </option>
+                    <option value="review">{tr('审核/阻塞', 'Review')}</option>
+                    <option value="done">{tr('已完成', 'Done')}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                    优先级
+                    {tr('优先级', 'Priority')}
                   </label>
                   <select
                     value={priority}
@@ -396,57 +420,65 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     }
                     className="w-full px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                   >
-                    <option value="urgent">🔥 紧急</option>
-                    <option value="high">🟠 高优</option>
-                    <option value="medium">🔵 普通</option>
-                    <option value="low">⚪ 较低</option>
+                    <option value="urgent">{tr('🔥 紧急', '🔥 Urgent')}</option>
+                    <option value="high">{tr('🟠 高优', '🟠 High')}</option>
+                    <option value="medium">{tr('🔵 普通', '🔵 Medium')}</option>
+                    <option value="low">{tr('⚪ 较低', '⚪ Low')}</option>
                   </select>
                 </div>
               </div>
             </div>
 
             {/* Collaborators multi-select */}
-            <div>
-              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                协同相关人员（可多选）
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {members.map((m) => {
-                  const selected = collaboratorIds.includes(m.id);
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => toggleCollab(m.id)}
-                      className={`px-2.5 py-1 rounded-full border text-xs transition-all ${
-                        selected
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      {m.name}
-                    </button>
-                  );
-                })}
+            {members.length > 0 && (
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  {tr('协同相关人员（可多选）', 'Collaborators (Multi-select)')}
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {members.map((m) => {
+                    const selected = collaboratorIds.includes(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => toggleCollab(m.id)}
+                        className={`px-2.5 py-1 rounded-full border text-xs transition-all ${
+                          selected
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                  标签（逗号或空格分隔）
+                  {tr(
+                    '标签（逗号或空格分隔）',
+                    'Tags (comma or space separated)'
+                  )}
                 </label>
                 <input
                   type="text"
                   value={tagsText}
                   onChange={(e) => setTagsText(e.target.value)}
-                  placeholder="例如：前端架构, 高优体验"
+                  placeholder={tr(
+                    '例如：前端架构, 高优体验',
+                    'e.g., frontend, performance'
+                  )}
                   className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                 />
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                  预估工时 (小时)
+                  {tr('预估工时 (小时)', 'Estimated Hours')}
                 </label>
                 <input
                   type="number"
@@ -463,13 +495,19 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
             <div>
               <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1">
-                快速拆解子任务（每行一条，可选）
+                {tr(
+                  '快速拆解子任务（每行一条，可选）',
+                  'Quick Subtasks Breakdown (one per line, optional)'
+                )}
               </label>
               <textarea
                 rows={2}
                 value={subtasksText}
                 onChange={(e) => setSubtasksText(e.target.value)}
-                placeholder={'完成接口契约联调\n补充边界用例自测'}
+                placeholder={tr(
+                  '完成接口契约联调\n补充边界用例自测',
+                  'Complete API contract integration\nAdd edge-case unit tests'
+                )}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
               />
             </div>
@@ -480,37 +518,42 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 onClick={onClose}
                 className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
               >
-                取消
+                {tr('取消', 'Cancel')}
               </button>
               <button
                 type="submit"
                 className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-sm"
               >
-                立即创建任务
+                {tr('立即创建任务', 'Create Task')}
               </button>
             </div>
           </form>
         )}
 
-        {/* Project Creation Form */}
+        {/* Project Creation / Edit Form */}
         {mode === 'project' && (
           <form onSubmit={handleProjectSubmit} className="p-6 space-y-4 text-xs">
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">
-                <label className="block font-semibold mb-1">项目名称 *</label>
+                <label className="block font-semibold mb-1">
+                  {tr('项目名称 *', 'Project Name *')}
+                </label>
                 <input
                   type="text"
                   required
                   autoFocus
                   value={projName}
                   onChange={(e) => setProjName(e.target.value)}
-                  placeholder="例如：企业数据安全网关 2.0"
+                  placeholder={tr(
+                    '例如：企业数据安全网关 2.0',
+                    'e.g., Enterprise Security Gateway 2.0'
+                  )}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                 />
               </div>
               <div>
                 <label className="block font-semibold mb-1">
-                  编号前缀 (如 SEC)
+                  {tr('编号前缀 (如 SEC)', 'Key Prefix (e.g. SEC)')}
                 </label>
                 <input
                   type="text"
@@ -524,7 +567,9 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold mb-1.5">项目主题色标</label>
+              <label className="block font-semibold mb-1.5">
+                {tr('项目主题色标', 'Project Accent Color')}
+              </label>
               <div className="flex gap-2">
                 {PROJECT_COLORS.map((c) => (
                   <button
@@ -541,12 +586,17 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-semibold mb-1">项目简介</label>
+              <label className="block font-semibold mb-1">
+                {tr('项目简介', 'Description')}
+              </label>
               <input
                 type="text"
                 value={projDesc}
                 onChange={(e) => setProjDesc(e.target.value)}
-                placeholder="一句话描述该项目的核心目标与里程碑..."
+                placeholder={tr(
+                  '一句话描述该项目的核心目标与里程碑...',
+                  'Brief summary of the project goals & milestones...'
+                )}
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
               />
             </div>
@@ -563,7 +613,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    删除项目
+                    {tr('删除项目', 'Delete Project')}
                   </button>
                 )}
               </div>
@@ -573,13 +623,15 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   onClick={onClose}
                   className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
                 >
-                  取消
+                  {tr('取消', 'Cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
                 >
-                  {editingProject ? '保存修改' : '创建项目'}
+                  {editingProject
+                    ? tr('保存修改', 'Save Changes')
+                    : tr('创建项目', 'Create Project')}
                 </button>
               </div>
             </div>
@@ -591,32 +643,41 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           <form onSubmit={handleMemberSubmit} className="p-6 space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-semibold mb-1">成员姓名 *</label>
+                <label className="block font-semibold mb-1">
+                  {tr('成员姓名 *', 'Member Name *')}
+                </label>
                 <input
                   type="text"
                   required
                   autoFocus
                   value={memName}
                   onChange={(e) => setMemName(e.target.value)}
-                  placeholder="例如：沈星回"
+                  placeholder={tr('例如：沈星回', 'e.g., Alex Chen')}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                 />
               </div>
               <div>
-                <label className="block font-semibold mb-1">岗位角色</label>
+                <label className="block font-semibold mb-1">
+                  {tr('岗位角色', 'Role / Title')}
+                </label>
                 <input
                   type="text"
                   value={memRole}
                   onChange={(e) => setMemRole(e.target.value)}
-                  placeholder="例如：资深后端架构师"
+                  placeholder={tr(
+                    '例如：资深后端架构师',
+                    'e.g., Senior Backend Architect'
+                  )}
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block font-semibold mb-1.5">头像色彩风格</label>
-              <div className="flex gap-2">
+              <label className="block font-semibold mb-1.5">
+                {tr('头像色彩风格', 'Avatar Color Theme')}
+              </label>
+              <div className="flex gap-2 flex-wrap">
                 {AVATAR_GRADIENTS.map((g) => (
                   <button
                     key={g.value}
@@ -625,10 +686,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     className={`px-3 py-1.5 rounded-xl text-white font-semibold bg-gradient-to-br ${
                       g.value
                     } ${
-                      memAvatarBg === g.value ? 'ring-2 ring-indigo-500' : 'opacity-75'
+                      memAvatarBg === g.value
+                        ? 'ring-2 ring-indigo-500'
+                        : 'opacity-75'
                     }`}
                   >
-                    {g.label}
+                    {tr(g.label, g.labelEn)}
                   </button>
                 ))}
               </div>
@@ -636,7 +699,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
             <div>
               <label className="block font-semibold mb-1">
-                每周标准工时容量 (用于人员看板饱和度计算)
+                {tr(
+                  '每周标准工时容量 (用于人员看板饱和度计算)',
+                  'Weekly Capacity Hours (Used for workload saturation calculation)'
+                )}
               </label>
               <input
                 type="number"
@@ -660,7 +726,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    删除成员
+                    {tr('删除成员', 'Delete Member')}
                   </button>
                 )}
               </div>
@@ -670,13 +736,15 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   onClick={onClose}
                   className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
                 >
-                  取消
+                  {tr('取消', 'Cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold"
                 >
-                  {editingMember ? '保存修改' : '添加成员'}
+                  {editingMember
+                    ? tr('保存修改', 'Save Changes')
+                    : tr('添加成员', 'Add Member')}
                 </button>
               </div>
             </div>

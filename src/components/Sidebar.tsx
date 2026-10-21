@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { BoardViewType, FilterState, Member, Project, Task } from '../types';
 import { getDueStatus } from '../utils/dateUtils';
+import { useI18n } from '../i18n/I18nContext';
 import { FlowLogo } from './FlowLogo';
 
 interface SidebarProps {
@@ -34,42 +35,54 @@ interface SidebarProps {
 export const BOARD_VIEWS: Array<{
   id: BoardViewType;
   label: string;
+  labelEn: string;
   shortDesc: string;
+  shortDescEn: string;
   icon: React.FC<{ className?: string }>;
   badgeColor: string;
 }> = [
   {
     id: 'status',
     label: '状态流转看板',
+    labelEn: 'Status Kanban',
     shortDesc: '敏捷工作流阶段推进',
+    shortDescEn: 'Agile workflow stage progression',
     icon: Kanban,
     badgeColor: 'text-indigo-500',
   },
   {
     id: 'project',
     label: '项目维度看板',
+    labelEn: 'Project Board',
     shortDesc: '按项目归属与进度聚合',
+    shortDescEn: 'Group by project & delivery progress',
     icon: FolderKanban,
     badgeColor: 'text-emerald-500',
   },
   {
     id: 'member',
     label: '人员负载看板',
+    labelEn: 'Team Workload',
     shortDesc: '按相关人员与工时水位',
+    shortDescEn: 'By assignee & weekly capacity load',
     icon: Users,
     badgeColor: 'text-amber-500',
   },
   {
     id: 'duedate',
     label: '截止日期与日历',
+    labelEn: 'Due Date & Calendar',
     shortDesc: '死线预警看板 + 月历视图',
+    shortDescEn: 'Deadline radar board + monthly calendar',
     icon: CalendarClock,
     badgeColor: 'text-rose-500',
   },
   {
     id: 'analytics',
     label: '全局效能仪表盘',
+    labelEn: 'Analytics & Insights',
     shortDesc: '多维统计图表与风险雷达',
+    shortDescEn: 'Multi-dimensional metrics & risk radar',
     icon: BarChart3,
     badgeColor: 'text-cyan-500',
   },
@@ -90,6 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onEditMember,
   onDeleteMember,
 }) => {
+  const { tr } = useI18n();
   const overdueCount = tasks.filter(
     (t) => getDueStatus(t.due_date, t.status) === 'overdue'
   ).length;
@@ -110,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              多维协同 Todo 与看板中枢
+              {tr('多维协同 Todo 与看板中枢', 'Multi-Board Work Todo & Kanban')}
             </p>
           </div>
         </div>
@@ -122,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <div className="px-2 mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              多维看板视图 (5)
+              {tr('多维看板视图 (5)', 'Board Views (5)')}
             </span>
           </div>
           <nav className="space-y-1">
@@ -148,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     />
                     <div className="truncate">
                       <div className="text-xs font-semibold leading-tight">
-                        {view.label}
+                        {tr(view.label, view.labelEn)}
                       </div>
                       <div
                         className={`text-[10px] truncate ${
@@ -157,7 +171,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             : 'text-slate-400 dark:text-slate-500'
                         }`}
                       >
-                        {view.shortDesc}
+                        {tr(view.shortDesc, view.shortDescEn)}
                       </div>
                     </div>
                   </div>
@@ -168,7 +182,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           ? 'bg-white/20 text-white'
                           : 'bg-rose-500/15 text-rose-500'
                       }`}
-                      title={`${overdueCount} 项任务已逾期`}
+                      title={tr(
+                        `${overdueCount} 项任务已逾期`,
+                        `${overdueCount} overdue tasks`
+                      )}
                     >
                       {overdueCount}
                     </span>
@@ -195,9 +212,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <span className="flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                逾期死线预警
+                {tr('逾期死线预警', 'Overdue Alerts')}
               </span>
-              <span className="font-mono font-bold">{overdueCount} 项</span>
+              <span className="font-mono font-bold">
+                {tr(`${overdueCount} 项`, `${overdueCount}`)}
+              </span>
             </button>
           </div>
         )}
@@ -206,13 +225,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <div className="px-2 mb-1.5 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              项目列表 ({projects.length})
+              {tr(`项目列表 (${projects.length})`, `Projects (${projects.length})`)}
             </span>
             <button
               type="button"
               onClick={onOpenNewProject}
               className="p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="新建项目"
+              title={tr('新建项目', 'New Project')}
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -229,7 +248,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <span className="flex items-center gap-2">
                 <Layers className="w-3.5 h-3.5 text-slate-400" />
-                全部项目
+                {tr('全部项目', 'All Projects')}
               </span>
               <span className="font-mono text-[11px] text-slate-400">
                 {tasks.length}
@@ -279,7 +298,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onEditProject(proj);
                         }}
                         className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                        title="编辑项目"
+                        title={tr('编辑项目', 'Edit Project')}
                       >
                         <Pencil className="w-3 h-3" />
                       </button>
@@ -290,7 +309,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onDeleteProject(proj);
                         }}
                         className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                        title="删除项目"
+                        title={tr('删除项目', 'Delete Project')}
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -306,13 +325,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div>
           <div className="px-2 mb-1.5 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              相关人员 ({members.length})
+              {tr(`相关人员 (${members.length})`, `Team Members (${members.length})`)}
             </span>
             <button
               type="button"
               onClick={onOpenNewMember}
               className="p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="新增团队成员"
+              title={tr('新增团队成员', 'New Team Member')}
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -362,7 +381,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex items-center gap-0.5 shrink-0 ml-1">
                     <span
                       className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-slate-500 group-hover:hidden"
-                      title="进行中关联任务数"
+                      title={tr('进行中关联任务数', 'Active related tasks')}
                     >
                       {activeCount}
                     </span>
@@ -374,7 +393,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onEditMember(mem);
                         }}
                         className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                        title="编辑成员"
+                        title={tr('编辑成员', 'Edit Member')}
                       >
                         <Pencil className="w-3 h-3" />
                       </button>
@@ -385,7 +404,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onDeleteMember(mem);
                         }}
                         className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
-                        title="删除成员"
+                        title={tr('删除成员', 'Delete Member')}
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -400,7 +419,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Footer Shortcut Hint */}
       <div className="p-3 border-t border-slate-200/70 dark:border-slate-800/80 bg-slate-50/60 dark:bg-[#0B0F17]/60 text-[11px] text-slate-400 flex items-center justify-between">
-        <span>快捷键导航</span>
+        <span>{tr('快捷键导航', 'Shortcuts')}</span>
         <div className="flex items-center gap-1">
           <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px]">
             Ctrl+K

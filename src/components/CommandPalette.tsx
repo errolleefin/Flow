@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Command,
+  Languages,
   Moon,
   Plus,
   Search,
@@ -9,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import type { BoardViewType, Project, Task } from '../types';
+import { useI18n } from '../i18n/I18nContext';
 import { BOARD_VIEWS } from './Sidebar';
 
 interface CommandPaletteProps {
@@ -34,6 +36,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenCreateTask,
   onToggleDarkMode,
 }) => {
+  const { lang, toggleLang, tr } = useI18n();
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -61,7 +64,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     (v) =>
       !q ||
       v.label.toLowerCase().includes(q) ||
-      v.shortDesc.toLowerCase().includes(q)
+      v.labelEn.toLowerCase().includes(q) ||
+      v.shortDesc.toLowerCase().includes(q) ||
+      v.shortDescEn.toLowerCase().includes(q)
   );
 
   return (
@@ -69,7 +74,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       <div
         className="fixed inset-0"
         onClick={onClose}
-        aria-label="关闭命令面板"
+        aria-label={tr('关闭命令面板', 'Close command palette')}
       />
       <div className="relative z-10 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111726] shadow-2xl overflow-hidden">
         {/* Search Input */}
@@ -80,7 +85,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="输入指令、看板名称、任务编号（如 AI-101）或关键词..."
+            placeholder={tr(
+              '输入指令、看板名称、任务编号（如 AI-101）或关键词...',
+              'Type a command, board name, task key (e.g. AI-101), or keyword...'
+            )}
             className="flex-1 bg-transparent text-sm text-slate-900 dark:text-white focus:outline-none"
           />
           <button
@@ -96,9 +104,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {/* Quick Actions */}
           <div>
             <div className="px-2 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              快捷指令
+              {tr('快捷指令', 'Quick Actions')}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
               <button
                 type="button"
                 onClick={() => {
@@ -109,7 +117,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               >
                 <span className="flex items-center gap-2 font-medium">
                   <Plus className="w-4 h-4 text-indigo-500" />
-                  新建工作 Todo 任务
+                  {tr('新建任务', 'New Task')}
                 </span>
                 <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px]">
                   N
@@ -130,7 +138,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   ) : (
                     <Moon className="w-4 h-4 text-indigo-500" />
                   )}
-                  切换{darkMode ? '明亮浅色' : 'Linear 深色'}主题
+                  {darkMode
+                    ? tr('切换明亮主题', 'Light Theme')
+                    : tr('切换深色主题', 'Dark Theme')}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  toggleLang();
+                  onClose();
+                }}
+                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 transition-colors"
+              >
+                <span className="flex items-center gap-2 font-medium">
+                  <Languages className="w-4 h-4 text-indigo-500" />
+                  {lang === 'zh' ? 'Switch to English' : '切换为简体中文'}
                 </span>
               </button>
             </div>
@@ -140,7 +164,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {matchingViews.length > 0 && (
             <div>
               <div className="px-2 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                切换多维看板视图
+                {tr('切换多维看板视图', 'Switch Board Views')}
               </div>
               <div className="space-y-1">
                 {matchingViews.map((view) => {
@@ -157,9 +181,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                     >
                       <span className="flex items-center gap-2.5">
                         <Icon className={`w-4 h-4 ${view.badgeColor}`} />
-                        <span className="font-semibold">{view.label}</span>
+                        <span className="font-semibold">
+                          {tr(view.label, view.labelEn)}
+                        </span>
                         <span className="text-slate-400">
-                          — {view.shortDesc}
+                          — {tr(view.shortDesc, view.shortDescEn)}
                         </span>
                       </span>
                       <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
@@ -173,7 +199,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {/* Matching Tasks */}
           <div>
             <div className="px-2 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              直达任务详情 ({matchingTasks.length})
+              {tr(
+                `直达任务详情 (${matchingTasks.length})`,
+                `Jump to Task (${matchingTasks.length})`
+              )}
             </div>
             <div className="space-y-1">
               {matchingTasks.map((t) => {
@@ -203,7 +232,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       </span>
                     </div>
                     <span className="text-[11px] text-slate-400 shrink-0 ml-2">
-                      {t.due_date || '未排期'}
+                      {t.due_date || tr('未排期', 'Unscheduled')}
                     </span>
                   </button>
                 );
@@ -214,9 +243,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
         <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between text-[11px] text-slate-400">
           <span className="inline-flex items-center gap-1">
-            <Command className="w-3 h-3" /> Flow 极客命令中心
+            <Command className="w-3 h-3" />{' '}
+            {tr('Flow 极客命令中心', 'Flow Command Center')}
           </span>
-          <span>按 ESC 退出</span>
+          <span>{tr('按 ESC 退出', 'Press ESC to close')}</span>
         </div>
       </div>
     </div>

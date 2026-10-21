@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Pause, Play, RotateCcw, Timer, X } from 'lucide-react';
 import type { Task } from '../types';
+import { useI18n } from '../i18n/I18nContext';
 
 interface PomodoroWidgetProps {
   activeTask: Task | null;
@@ -13,6 +14,7 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
   onClose,
   onLogMinutes,
 }) => {
+  const { tr } = useI18n();
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [running, setRunning] = useState(true);
 
@@ -49,7 +51,7 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400">
           <Timer className="w-4 h-4 animate-pulse" />
-          <span>专注番茄钟 · Pomodoro</span>
+          <span>{tr('专注番茄钟 · Pomodoro', 'Pomodoro Focus Timer')}</span>
         </div>
         <button
           type="button"
@@ -78,7 +80,7 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
             type="button"
             onClick={() => setRunning(!running)}
             className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
-            title={running ? '暂停' : '继续'}
+            title={running ? tr('暂停', 'Pause') : tr('继续', 'Resume')}
           >
             {running ? (
               <Pause className="w-3.5 h-3.5" />
@@ -93,7 +95,7 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
               setSecondsLeft(25 * 60);
             }}
             className="p-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300"
-            title="重置 25 分钟"
+            title={tr('重置 25 分钟', 'Reset 25 minutes')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -104,10 +106,13 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
               onClose();
             }}
             className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold inline-flex items-center gap-1"
-            title="结算当前专注时长并写入任务记录"
+            title={tr(
+              '结算当前专注时长并写入任务记录',
+              'Log elapsed focus time to task'
+            )}
           >
             <Check className="w-3.5 h-3.5" />
-            记入 +{elapsedMinutes}m
+            {tr(`记入 +${elapsedMinutes}m`, `Log +${elapsedMinutes}m`)}
           </button>
         </div>
       </div>
