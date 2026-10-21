@@ -1061,6 +1061,7 @@ export const App: React.FC = () => {
       <ProjectChatDrawer
         isOpen={chatDrawerOpen}
         initialGroupId={activeChatGroupId}
+        activeProjectId={filters.projectId}
         currentUser={currentUser}
         projects={projects}
         members={members}

@@ -25,6 +25,7 @@ import type {
 interface ProjectChatDrawerProps {
   isOpen: boolean;
   initialGroupId?: string | null;
+  activeProjectId?: string | null;
   currentUser: UserAccount | null;
   chatGroups: ChatGroup[];
   projects: Project[];
@@ -39,6 +40,7 @@ interface ProjectChatDrawerProps {
 export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
   isOpen,
   initialGroupId,
+  activeProjectId,
   currentUser,
   chatGroups,
   projects,
@@ -74,10 +76,27 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
     }
     if (initialGroupId) {
       setActiveGroupId(initialGroupId);
-    } else if (chatGroups.length > 0 && !activeGroupId) {
+      return;
+    }
+    // If a project is currently selected on the board, prefer selecting its bound chat group
+    if (activeProjectId && activeProjectId !== 'all') {
+      const matched = chatGroups.find((g) => g.project_id === activeProjectId);
+      if (matched) {
+        setActiveGroupId(matched.id);
+        return;
+      }
+    }
+    if (chatGroups.length > 0 && !activeGroupId) {
       setActiveGroupId(chatGroups[0].id);
     }
-  }, [isOpen, initialGroupId, chatGroups, currentUser, members]);
+  }, [
+    isOpen,
+    initialGroupId,
+    activeProjectId,
+    chatGroups,
+    currentUser,
+    members,
+  ]);
 
   useEffect(() => {
     if (!isOpen || !activeGroupId) {
@@ -103,14 +122,30 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
   const activeGroup =
     chatGroups.find((g) => g.id === activeGroupId) || null;
   const projectMap = new Map(projects.map((p) => [p.id, p]));
-  const memberMap = new Map(members.map((m) => [m.id, m]));
   const taskByKey = new Map(tasks.map((t) => [t.task_key.toUpperCase(), t]));
+
+  // Resolve active project theme color dynamically
+  const resolvedProject = showGroupForm
+    ? grpProjectId
+      ? projectMap.get(grpProjectId) || null
+      : null
+    : activeGroup?.project_id
+      ? projectMap.get(activeGroup.project_id) || null
+      : activeProjectId && activeProjectId !== 'all'
+        ? projectMap.get(activeProjectId) || null
+        : projects[0] || null;
+
+  const themeColor = resolvedProject?.color || '#6366f1';
 
   const openCreateGroupForm = () => {
     setEditingGroup(null);
     setGrpName('');
     setGrpDesc('');
-    setGrpProjectId(projects[0]?.id || '');
+    setGrpProjectId(
+      activeProjectId && activeProjectId !== 'all'
+        ? activeProjectId
+        : projects[0]?.id || ''
+    );
     setGrpMemberIds(members.map((m) => m.id));
     setShowGroupForm(true);
   };
@@ -252,7 +287,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
     }
   };
 
-  // Render message content with clickable #TASK-KEY references
+  // Render message content with clickable #TASK-KEY references styled with project color
   const renderMessageContent = (content: string) => {
     const parts = content.split(/(#[A-Z0-9]+-\d+)/gi);
     return parts.map((part, idx) => {
@@ -260,6 +295,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
         const key = part.slice(1).toUpperCase();
         const linkedTask = taskByKey.get(key);
         if (linkedTask) {
+          const taskProj = projectMap.get(linkedTask.project_id);
+          const chipColor = taskProj?.color || themeColor;
           return (
             <button
               key={idx}
@@ -268,7 +305,12 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                 onClose();
                 onSelectTask(linkedTask);
               }}
-              className="mx-0.5 px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 font-mono text-[11px] font-bold hover:underline"
+              style={{
+                backgroundColor: `${chipColor}20`,
+                color: chipColor,
+                borderColor: `${chipColor}40`,
+              }}
+              className="mx-0.5 px-1.5 py-0.5 rounded border font-mono text-[11px] font-bold hover:underline"
               title={linkedTask.title}
             >
               {part} ({linkedTask.title})
@@ -292,23 +334,45 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
         aria-label={tr('关闭项目群聊抽屉', 'Close project chat drawer')}
       />
       <aside className="relative z-10 w-full max-w-4xl h-full bg-white dark:bg-[#0D1320] border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
-        {/* Top Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-emerald-500/10 via-indigo-500/5 to-transparent">
+        {/* Top Header — Dynamically Styled with Project Theme Color */}
+        <div
+          style={{
+            background: `linear-gradient(90deg, ${themeColor}22 0%, ${themeColor}08 55%, transparent 100%)`,
+          }}
+          className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between transition-colors"
+        >
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+            <div
+              style={{ backgroundColor: themeColor }}
+              className="w-9 h-9 rounded-xl text-white flex items-center justify-center shadow-sm transition-colors"
+            >
               <MessageSquare className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                {tr(
-                  '自定义项目沟通群聊中心',
-                  'Custom Project Communication Channels'
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {tr(
+                    '自定义项目沟通群聊中心',
+                    'Custom Project Communication Channels'
+                  )}
+                </h2>
+                {resolvedProject && (
+                  <span
+                    style={{
+                      backgroundColor: `${themeColor}20`,
+                      color: themeColor,
+                      borderColor: `${themeColor}40`,
+                    }}
+                    className="px-2 py-0.5 rounded-md border text-[10px] font-bold"
+                  >
+                    [{resolvedProject.code}] {resolvedProject.name}
+                  </span>
                 )}
-              </h2>
+              </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {tr(
-                  '按项目或跨部门专项自定义建群 · 支持 @相关人员 与 #任务编号 实时联动跳转',
-                  'Create custom project or cross-team channels · @mention members & link #TASK-KEY cards'
+                  '按项目或跨部门专项自定义建群 · 主题色随关联项目自动同步',
+                  'Custom project or cross-team channels · Theme color automatically syncs with linked project'
                 )}
               </p>
             </div>
@@ -318,7 +382,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
             <button
               type="button"
               onClick={openCreateGroupForm}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm"
+              style={{ backgroundColor: themeColor }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:opacity-90 text-white text-xs font-semibold shadow-sm transition-opacity"
             >
               <Plus className="w-3.5 h-3.5" />
               {tr('新建自定义群聊', 'New Channel')}
@@ -356,7 +421,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                   <button
                     type="button"
                     onClick={openCreateGroupForm}
-                    className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline"
+                    style={{ color: themeColor }}
+                    className="font-semibold hover:underline"
                   >
                     {tr('+ 立即创建首个项目群聊', '+ Create your first channel')}
                   </button>
@@ -366,6 +432,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                   const proj = grp.project_id
                     ? projectMap.get(grp.project_id)
                     : null;
+                  const channelColor = proj?.color || '#6366f1';
                   const isSelected = grp.id === activeGroup?.id && !showGroupForm;
                   return (
                     <div
@@ -374,18 +441,29 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                         setShowGroupForm(false);
                         setActiveGroupId(grp.id);
                       }}
+                      style={
+                        isSelected
+                          ? {
+                              backgroundColor: channelColor,
+                              borderColor: channelColor,
+                            }
+                          : undefined
+                      }
                       className={`group p-3 rounded-xl border transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                          : 'bg-white dark:bg-[#121928] border-slate-200/70 dark:border-slate-800/80 hover:border-indigo-500/40'
+                          ? 'text-white shadow-sm'
+                          : 'bg-white dark:bg-[#121928] border-slate-200/70 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-1.5">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <Hash
+                              style={
+                                !isSelected ? { color: channelColor } : undefined
+                              }
                               className={`w-3.5 h-3.5 shrink-0 ${
-                                isSelected ? 'text-indigo-200' : 'text-emerald-500'
+                                isSelected ? 'text-white/85' : ''
                               }`}
                             />
                             <span className="text-xs font-bold truncate">
@@ -394,10 +472,16 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                           </div>
                           {proj ? (
                             <span
-                              className={`inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.2 rounded ${
-                                isSelected
-                                  ? 'bg-white/20 text-white'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                              style={
+                                !isSelected
+                                  ? {
+                                      backgroundColor: `${channelColor}18`,
+                                      color: channelColor,
+                                    }
+                                  : undefined
+                              }
+                              className={`inline-flex items-center gap-1 mt-1 text-[10px] px-1.5 py-0.2 rounded font-medium ${
+                                isSelected ? 'bg-white/20 text-white' : ''
                               }`}
                             >
                               <FolderKanban className="w-2.5 h-2.5" />
@@ -406,7 +490,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                           ) : (
                             <span
                               className={`inline-block mt-1 text-[10px] ${
-                                isSelected ? 'text-indigo-100' : 'text-slate-400'
+                                isSelected ? 'text-white/80' : 'text-slate-400'
                               }`}
                             >
                               {tr('跨项目综合频道', 'Cross-Project Channel')}
@@ -462,17 +546,23 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                 className="flex-1 overflow-y-auto p-6 space-y-4 text-xs"
               >
                 <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {editingGroup
-                      ? tr(
-                          `编辑沟通群聊：${editingGroup.name}`,
-                          `Edit Channel: ${editingGroup.name}`
-                        )
-                      : tr(
-                          '新建自定义项目沟通群聊',
-                          'Create Custom Project Group Chat'
-                        )}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: themeColor }}
+                    />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      {editingGroup
+                        ? tr(
+                            `编辑沟通群聊：${editingGroup.name}`,
+                            `Edit Channel: ${editingGroup.name}`
+                          )
+                        : tr(
+                            '新建自定义项目沟通群聊',
+                            'Create Custom Project Group Chat'
+                          )}
+                    </h3>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setShowGroupForm(false)}
@@ -502,7 +592,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
 
                 <div>
                   <label className="block font-semibold mb-1">
-                    {tr('绑定关联项目（可选）', 'Linked Project (Optional)')}
+                    {tr('绑定关联项目（主题色自动跟随项目）', 'Linked Project (Theme color follows project)')}
                   </label>
                   <select
                     value={grpProjectId}
@@ -551,9 +641,17 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                           key={m.id}
                           type="button"
                           onClick={() => toggleGroupMember(m.id)}
+                          style={
+                            selected
+                              ? {
+                                  backgroundColor: themeColor,
+                                  borderColor: themeColor,
+                                }
+                              : undefined
+                          }
                           className={`px-2.5 py-1 rounded-full border text-xs transition-all ${
                             selected
-                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              ? 'text-white font-semibold'
                               : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                           }`}
                         >
@@ -574,7 +672,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                    style={{ backgroundColor: themeColor }}
+                    className="px-5 py-2 rounded-xl hover:opacity-90 text-white font-semibold transition-opacity"
                   >
                     {editingGroup
                       ? tr('保存修改', 'Save Changes')
@@ -584,7 +683,10 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
               </form>
             ) : !activeGroup ? (
               <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-slate-400 space-y-3">
-                <MessageSquare className="w-10 h-10 text-slate-300 dark:text-slate-700" />
+                <MessageSquare
+                  className="w-10 h-10 opacity-40"
+                  style={{ color: themeColor }}
+                />
                 <p>
                   {tr(
                     '请在左侧选择一个项目沟通群聊，或点击右上角「新建自定义群聊」',
@@ -595,9 +697,19 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
             ) : (
               <>
                 {/* Active Channel Header */}
-                <div className="px-5 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/40 dark:bg-slate-900/40">
+                <div
+                  style={{
+                    borderBottomColor: `${themeColor}30`,
+                    backgroundColor: `${themeColor}08`,
+                  }}
+                  className="px-5 py-3 border-b flex items-center justify-between"
+                >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: themeColor }}
+                      />
                       <span className="text-xs font-bold text-slate-900 dark:text-white">
                         # {activeGroup.name}
                       </span>
@@ -625,7 +737,10 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                    <span
+                      style={{ color: themeColor }}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold"
+                    >
                       <Users className="w-3.5 h-3.5" />
                       {activeGroup.member_ids.length}
                     </span>
@@ -647,7 +762,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                     messages.map((msg) => (
                       <div
                         key={msg.id}
-                        className="group flex items-start gap-3 p-3 rounded-2xl bg-slate-50/80 dark:bg-[#131B2C] border border-slate-200/60 dark:border-slate-800/80"
+                        style={{ borderLeftColor: themeColor }}
+                        className="group flex items-start gap-3 p-3 rounded-2xl border-l-2 bg-slate-50/80 dark:bg-[#131B2C] border border-slate-200/60 dark:border-slate-800/80"
                       >
                         <div
                           className={`w-8 h-8 rounded-full bg-gradient-to-br ${msg.avatar_bg} text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-xs`}
@@ -661,7 +777,13 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                                 {msg.sender_name}
                               </span>
                               {msg.sender_role && (
-                                <span className="px-1.5 py-0.2 rounded bg-slate-200/70 dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-400">
+                                <span
+                                  style={{
+                                    backgroundColor: `${themeColor}18`,
+                                    color: themeColor,
+                                  }}
+                                  className="px-1.5 py-0.2 rounded text-[10px] font-medium"
+                                >
                                   {msg.sender_role}
                                 </span>
                               )}
@@ -700,7 +822,10 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                 <div className="px-4 py-2 border-t border-slate-200/70 dark:border-slate-800 bg-slate-50/60 dark:bg-[#0B0F19] flex flex-wrap items-center gap-1.5 text-[11px]">
                   {members.length > 0 && (
                     <div className="flex items-center gap-1 mr-2">
-                      <AtSign className="w-3 h-3 text-indigo-500" />
+                      <AtSign
+                        className="w-3 h-3"
+                        style={{ color: themeColor }}
+                      />
                       {members.slice(0, 5).map((m) => (
                         <button
                           key={m.id}
@@ -708,7 +833,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                           onClick={() =>
                             setInput((prev) => `${prev}@${m.name} `)
                           }
-                          className="px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 text-slate-600 dark:text-slate-300"
+                          className="px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:opacity-80 text-slate-600 dark:text-slate-300"
                         >
                           @{m.name}
                         </button>
@@ -718,7 +843,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
 
                   {groupTasks.length > 0 && (
                     <div className="flex items-center gap-1">
-                      <Hash className="w-3 h-3 text-emerald-500" />
+                      <Hash className="w-3 h-3" style={{ color: themeColor }} />
                       {groupTasks.slice(0, 4).map((t) => (
                         <button
                           key={t.id}
@@ -726,7 +851,11 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                           onClick={() =>
                             setInput((prev) => `${prev}#${t.task_key} `)
                           }
-                          className="px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 font-mono text-[10px] text-slate-600 dark:text-slate-300"
+                          style={{
+                            borderColor: `${themeColor}45`,
+                            color: themeColor,
+                          }}
+                          className="px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border font-mono text-[10px] hover:opacity-80"
                           title={t.title}
                         >
                           #{t.task_key}
@@ -763,12 +892,13 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                       `在 #${activeGroup.name} 中输入消息（支持 @姓名 或 #任务编号）...`,
                       `Message #${activeGroup.name} (@mention or #TASK-KEY)...`
                     )}
-                    className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                    className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:outline-none"
                   />
                   <button
                     type="submit"
                     disabled={!input.trim()}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5"
+                    style={{ backgroundColor: themeColor }}
+                    className="px-4 py-2 rounded-xl hover:opacity-90 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-opacity"
                   >
                     <Send className="w-3.5 h-3.5" />
                     {tr('发送', 'Send')}

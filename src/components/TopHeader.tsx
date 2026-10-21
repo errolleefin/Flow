@@ -193,17 +193,36 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </button>
 
-          {/* Custom Project Group Chat Trigger (Top Menu Only) */}
+          {/* Custom Project Group Chat Trigger (Top Menu Only, Theme Color Synced with Project) */}
           <button
             type="button"
             onClick={onOpenChatDrawer}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-indigo-500/50 transition-colors"
-            title={tr('打开自定义项目沟通群聊', 'Open Custom Project Group Chats')}
+            style={
+              activeProject
+                ? {
+                    backgroundColor: activeProject.color,
+                    borderColor: activeProject.color,
+                  }
+                : undefined
+            }
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold shadow-sm transition-all ${
+              activeProject
+                ? 'text-white hover:opacity-90'
+                : 'border-indigo-500/30 bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20'
+            }`}
+            title={tr(
+              activeProject
+                ? `打开「${activeProject.name}」项目沟通群聊`
+                : '打开自定义项目沟通群聊',
+              activeProject
+                ? `Open "${activeProject.name}" Project Group Chat`
+                : 'Open Custom Project Group Chats'
+            )}
           >
-            <MessageSquare className="w-3.5 h-3.5 text-indigo-500" />
+            <MessageSquare className="w-3.5 h-3.5 text-white" />
             <span>{tr('项目群聊', 'Group Chat')}</span>
             {chatGroupCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
+              <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-white font-mono text-[10px]">
                 {chatGroupCount}
               </span>
             )}

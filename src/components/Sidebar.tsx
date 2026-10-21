@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderKanban,
+  GripVertical,
   Kanban,
   Layers,
   LogOut,
@@ -166,6 +167,108 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [membersOpen, setMembersOpen] = useState(true);
   const [showAllMembers, setShowAllMembers] = useState(false);
 
+  // Custom draggable order & pinning for Board Views
+  const [viewOrder, setViewOrder] = useState<BoardViewType[]>(() => {
+    try {
+      const saved = localStorage.getItem('flow-sidebar-view-order');
+      if (saved) {
+        const parsed = JSON.parse(saved) as BoardViewType[];
+        const defaultIds = BOARD_VIEWS.map((v) => v.id);
+        if (
+          Array.isArray(parsed) &&
+          defaultIds.every((id) => parsed.includes(id))
+        ) {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return BOARD_VIEWS.map((v) => v.id);
+  });
+
+  const [pinnedViews, setPinnedViews] = useState<BoardViewType[]>(() => {
+    try {
+      const saved = localStorage.getItem('flow-sidebar-pinned-views');
+      if (saved) {
+        const parsed = JSON.parse(saved) as BoardViewType[];
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const [draggingViewId, setDraggingViewId] = useState<BoardViewType | null>(
+    null
+  );
+  const [dragOverViewId, setDragOverViewId] = useState<BoardViewType | null>(
+    null
+  );
+
+  const orderedBoardViews = useMemo(() => {
+    const viewMap = new Map(BOARD_VIEWS.map((v) => [v.id, v]));
+    const ordered = viewOrder
+      .map((id) => viewMap.get(id))
+      .filter((v): v is (typeof BOARD_VIEWS)[number] => Boolean(v));
+    return ordered.sort((a, b) => {
+      const aPinned = pinnedViews.includes(a.id);
+      const bPinned = pinnedViews.includes(b.id);
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      return 0;
+    });
+  }, [viewOrder, pinnedViews]);
+
+  const handleTogglePinView = (viewId: BoardViewType) => {
+    setPinnedViews((prev) => {
+      const exists = prev.includes(viewId);
+      const next = exists
+        ? prev.filter((id) => id !== viewId)
+        : [viewId, ...prev];
+      localStorage.setItem('flow-sidebar-pinned-views', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleDropView = (targetViewId: BoardViewType) => {
+    if (!draggingViewId || draggingViewId === targetViewId) {
+      setDraggingViewId(null);
+      setDragOverViewId(null);
+      return;
+    }
+    const currentIds = orderedBoardViews.map((v) => v.id);
+    const fromIdx = currentIds.indexOf(draggingViewId);
+    const toIdx = currentIds.indexOf(targetViewId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const nextIds = [...currentIds];
+    nextIds.splice(fromIdx, 1);
+    nextIds.splice(toIdx, 0, draggingViewId);
+
+    setViewOrder(nextIds);
+    localStorage.setItem('flow-sidebar-view-order', JSON.stringify(nextIds));
+
+    // If dragged onto a pinned view while unpinned (or vice versa), align pin state with target
+    const targetPinned = pinnedViews.includes(targetViewId);
+    const sourcePinned = pinnedViews.includes(draggingViewId);
+    if (targetPinned !== sourcePinned) {
+      setPinnedViews((prev) => {
+        const nextPin = targetPinned
+          ? [...prev, draggingViewId]
+          : prev.filter((id) => id !== draggingViewId);
+        localStorage.setItem(
+          'flow-sidebar-pinned-views',
+          JSON.stringify(nextPin)
+        );
+        return nextPin;
+      });
+    }
+
+    setDraggingViewId(null);
+    setDragOverViewId(null);
+  };
+
   const overdueCount = tasks.filter(
     (t) => getDueStatus(t.due_date, t.status) === 'overdue'
   ).length;
@@ -233,29 +336,72 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Scrollable Navigation Sections */}
       <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4">
-        {/* 1. Five Board Views (Clean Single-Line Navigation) */}
+        {/* 1. Five Board Views (Draggable Order + Pinnable) */}
         <div>
           <div className="px-2 mb-1 flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {tr('视图导航', 'Views')}
+              {tr('视图导航（可拖拽排序/置顶）', 'Views (Drag & Pin)')}
             </span>
           </div>
           <nav className="space-y-0.5">
-            {BOARD_VIEWS.map((view) => {
+            {orderedBoardViews.map((view) => {
               const Icon = view.icon;
               const isActive = activeView === view.id;
+              const isPinned = pinnedViews.includes(view.id);
+              const isDragOver =
+                dragOverViewId === view.id && draggingViewId !== view.id;
+
               return (
-                <button
+                <div
                   key={view.id}
-                  type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggingViewId(view.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', view.id);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverViewId !== view.id) {
+                      setDragOverViewId(view.id);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverViewId === view.id) {
+                      setDragOverViewId(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    handleDropView(view.id);
+                  }}
+                  onDragEnd={() => {
+                    setDraggingViewId(null);
+                    setDragOverViewId(null);
+                  }}
                   onClick={() => onSelectView(view.id)}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
                     isActive
                       ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 font-semibold'
                       : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
-                  }`}
+                  } ${
+                    isDragOver
+                      ? 'ring-2 ring-indigo-500 bg-indigo-500/10'
+                      : ''
+                  } ${draggingViewId === view.id ? 'opacity-50' : ''}`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      title={tr('上下拖拽调整视图顺序', 'Drag to reorder view')}
+                      className="inline-flex items-center shrink-0"
+                    >
+                      <GripVertical
+                        className={`w-3 h-3 shrink-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-70 transition-opacity ${
+                          isActive ? 'text-indigo-200' : 'text-slate-400'
+                        }`}
+                      />
+                    </span>
                     <Icon
                       className={`w-3.5 h-3.5 shrink-0 ${
                         isActive ? 'text-white' : view.badgeColor
@@ -264,23 +410,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <span className="truncate">
                       {tr(view.label, view.labelEn)}
                     </span>
+                    {isPinned && (
+                      <Pin
+                        className={`w-2.5 h-2.5 shrink-0 ${
+                          isActive
+                            ? 'text-white fill-white/40'
+                            : 'text-indigo-500 fill-indigo-500/30'
+                        }`}
+                      />
+                    )}
                   </div>
-                  {view.id === 'duedate' && overdueCount > 0 && (
-                    <span
-                      className={`px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full ${
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {view.id === 'duedate' && overdueCount > 0 && (
+                      <span
+                        className={`px-1.5 py-0.2 text-[10px] font-mono font-bold rounded-full ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-rose-500/15 text-rose-500'
+                        }`}
+                        title={tr(
+                          `${overdueCount} 项任务已逾期`,
+                          `${overdueCount} overdue tasks`
+                        )}
+                      >
+                        {overdueCount}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTogglePinView(view.id);
+                      }}
+                      className={`p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
                         isActive
-                          ? 'bg-white/20 text-white'
-                          : 'bg-rose-500/15 text-rose-500'
+                          ? 'hover:bg-white/20 text-white'
+                          : isPinned
+                            ? 'text-indigo-500'
+                            : 'text-slate-400 hover:text-indigo-500'
                       }`}
-                      title={tr(
-                        `${overdueCount} 项任务已逾期`,
-                        `${overdueCount} overdue tasks`
-                      )}
+                      title={
+                        isPinned
+                          ? tr('取消置顶该视图', 'Unpin view')
+                          : tr('置顶该视图', 'Pin view to top')
+                      }
                     >
-                      {overdueCount}
-                    </span>
-                  )}
-                </button>
+                      <Pin className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
               );
             })}
           </nav>
