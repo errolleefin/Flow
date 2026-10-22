@@ -30,7 +30,6 @@ interface TaskDetailDrawerProps {
   task: Task | null;
   projects: Project[];
   members: Member[];
-  currentUserMemberId?: string | null;
   canEditTask?: boolean;
   canDeleteTask?: boolean;
   onClose: () => void;
@@ -39,11 +38,7 @@ interface TaskDetailDrawerProps {
   onAddSubtask: (taskId: string, title: string) => Promise<void>;
   onToggleSubtask: (subId: string, completed: boolean) => Promise<void>;
   onDeleteSubtask: (subId: string) => Promise<void>;
-  onAddComment: (
-    taskId: string,
-    memberId: string | null,
-    content: string
-  ) => Promise<void>;
+  onAddComment: (taskId: string, content: string) => Promise<void>;
   onStartPomodoro: (task: Task) => void;
 }
 
@@ -51,7 +46,6 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   task,
   projects,
   members,
-  currentUserMemberId = null,
   canEditTask = true,
   canDeleteTask = true,
   onClose,
@@ -69,17 +63,13 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newTagText, setNewTagText] = useState('');
   const [commentText, setCommentText] = useState('');
-  const [commentAuthorId, setCommentAuthorId] = useState<string>('');
 
   useEffect(() => {
     if (task) {
       setTitle(task.title);
       setDescription(task.description || '');
-      setCommentAuthorId(
-        currentUserMemberId || task.assignee_id || members[0]?.id || ''
-      );
     }
-  }, [task, members, currentUserMemberId]);
+  }, [task]);
 
   if (!task) return null;
 
@@ -123,7 +113,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
-    await onAddComment(task.id, commentAuthorId || null, commentText.trim());
+    await onAddComment(task.id, commentText.trim());
     setCommentText('');
   };
 
@@ -599,19 +589,6 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             {/* Post Comment Form */}
             <form onSubmit={handlePostComment} className="space-y-2">
               <div className="flex gap-2">
-                {members.length > 0 && (
-                  <select
-                    value={commentAuthorId}
-                    onChange={(e) => setCommentAuthorId(e.target.value)}
-                    className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs"
-                  >
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {tr(`以 ${m.name} 身份评论`, `Post as ${m.name}`)}
-                      </option>
-                    ))}
-                  </select>
-                )}
                 <input
                   type="text"
                   value={commentText}
@@ -649,7 +626,9 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-semibold text-slate-700 dark:text-slate-200">
-                        {actor ? actor.name : tr('系统动态', 'System')}
+                        {actor
+                          ? actor.name
+                          : act.actor_name || tr('系统动态', 'System')}
                         {act.type === 'system' && (
                           <span className="ml-1.5 text-[10px] font-normal px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-800 text-slate-500">
                             {tr('自动审计', 'Audit')}

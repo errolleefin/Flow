@@ -128,6 +128,29 @@ export function normalizePermissions(role, customPerms) {
   };
 }
 
+export function canSeeProject(user, projectId) {
+  const visible = user.permissions.visible_project_ids;
+  return (
+    visible === 'all' || (Array.isArray(visible) && visible.includes(projectId))
+  );
+}
+
+// A user limited to specific projects must keep seeing the ones they create.
+export async function grantProjectVisibility(db, user, projectId) {
+  const visible = user.permissions.visible_project_ids;
+  if (!Array.isArray(visible) || visible.includes(projectId)) return;
+  const nextPerms = {
+    ...user.permissions,
+    visible_project_ids: [...visible, projectId],
+  };
+  await db.run(
+    'UPDATE users SET permissions = ? WHERE id = ?',
+    JSON.stringify(nextPerms),
+    user.id
+  );
+  user.permissions = nextPerms;
+}
+
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const derived = crypto.scryptSync(String(password), salt, 64).toString('hex');
@@ -229,6 +252,7 @@ async function initSqliteSchema(db) {
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
       member_id TEXT,
+      actor_name TEXT DEFAULT NULL,
       type TEXT NOT NULL,
       content TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -246,6 +270,7 @@ async function initSqliteSchema(db) {
 
     CREATE TABLE IF NOT EXISTS ai_messages (
       id TEXT PRIMARY KEY,
+      user_id TEXT DEFAULT NULL,
       role TEXT NOT NULL,
       content TEXT NOT NULL,
       operations TEXT DEFAULT '[]',
@@ -307,6 +332,14 @@ async function initSqliteSchema(db) {
   if (!memCols.some((c) => c.name === 'pinned')) {
     await db.exec('ALTER TABLE members ADD COLUMN pinned INTEGER DEFAULT 0;');
   }
+  const actCols = await db.all('PRAGMA table_info(activities)');
+  if (!actCols.some((c) => c.name === 'actor_name')) {
+    await db.exec('ALTER TABLE activities ADD COLUMN actor_name TEXT DEFAULT NULL;');
+  }
+  const aiMsgCols = await db.all('PRAGMA table_info(ai_messages)');
+  if (!aiMsgCols.some((c) => c.name === 'user_id')) {
+    await db.exec('ALTER TABLE ai_messages ADD COLUMN user_id TEXT DEFAULT NULL;');
+  }
 }
 
 async function seedDefaults(db) {
@@ -318,18 +351,6 @@ async function seedDefaults(db) {
       '',
       'gpt-4o-mini',
       0.2,
-      new Date().toISOString()
-    );
-  }
-
-  const msgCountRow = await db.get('SELECT COUNT(*) as cnt FROM ai_messages');
-  if (!msgCountRow || Number(msgCountRow.cnt) === 0) {
-    await db.run(
-      'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)',
-      crypto.randomUUID(),
-      'assistant',
-      '你好！我是 **Flow AI 智能助理**。你可以先在右上角「接口配置」中永久保存你的 OpenAI 兼容 API（支持 OpenAI、DeepSeek、硅基流动、OpenRouter、阿里云百炼、本地 Ollama 等），然后直接用自然语言向我发送任务指令或粘贴会议纪要，我会自动为你提取 **任务名称、所属项目、截止日期、相关人员（主负责与协作人）、优先级与子任务清单** 并录入数据库！',
-      '[]',
       new Date().toISOString()
     );
   }

@@ -241,10 +241,17 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
 
     try {
       if (editingUser) {
+        if (password && password.length < 4) {
+          onShowToast(
+            tr('新密码不能少于 4 位', 'Password must be at least 4 chars'),
+            'error'
+          );
+          return;
+        }
         const updated = await apiClient.updateUser(editingUser.id, {
           username: username.trim(),
           display_name: displayName.trim() || username.trim(),
-          password: password.trim() || undefined,
+          password: password || undefined,
           role,
           member_id: memberId || null,
           permissions,

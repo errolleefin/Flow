@@ -1,98 +1,62 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import { createApp } from '../server/app.mjs';
-
-const TEST_DB_PATH = path.resolve('data/test-flow.sqlite');
-
-function cleanupTestDb() {
-  for (const suffix of ['', '-shm', '-wal']) {
-    const p = `${TEST_DB_PATH}${suffix}`;
-    if (fs.existsSync(p)) {
-      try {
-        fs.unlinkSync(p);
-      } catch {
-        // ignore lock during teardown
-      }
-    }
-  }
-}
+import { startTestApp, setupAdmin } from './helpers.mjs';
 
 test('SQLite database initializes clean (zero mock data) and supports full CRUD across projects, members, tasks, subtasks, and activities', async (t) => {
-  cleanupTestDb();
-  const { app, closeDb } = createApp(TEST_DB_PATH);
-  const server = app.listen(0);
-  const port = server.address().port;
-  const baseUrl = `http://127.0.0.1:${port}`;
+  const { api } = await startTestApp(t);
 
-  t.after(() => {
-    server.close();
-    closeDb();
-    cleanupTestDb();
-  });
+  // 0. First-time Super Admin setup creates and binds a member with the display name
+  const statusBefore = (await api('GET', '/api/auth/status')).data;
+  assert.equal(statusBefore.initialized, false);
+  assert.equal(statusBefore.user, null);
 
-  // 1. Bootstrap endpoint starts completely clean with 0 mock data
-  const bootRes = await fetch(`${baseUrl}/api/bootstrap`);
+  const setupData = await setupAdmin(api, { display_name: '张明' });
+  const token = setupData.token;
+  assert.ok(token);
+  assert.equal(setupData.user.role, 'admin');
+  assert.ok(setupData.user.member_id, 'Setup should create and bind a member');
+
+  // 1. Bootstrap starts with no projects or tasks (only the admin's own member)
+  const bootRes = await api('GET', '/api/bootstrap', { token });
   assert.equal(bootRes.status, 200);
-  const bootData = await bootRes.json();
+  assert.deepEqual(bootRes.data.projects, [], 'Should start with 0 mock projects');
+  assert.deepEqual(bootRes.data.tasks, [], 'Should start with 0 mock tasks');
+  const targetAssignee = bootRes.data.members.find(
+    (m) => m.id === setupData.user.member_id
+  );
+  assert.equal(targetAssignee.name, '张明');
 
-  assert.deepEqual(bootData.projects, [], 'Should start with 0 mock projects');
-  assert.deepEqual(bootData.members, [], 'Should start with 0 mock members');
-  assert.deepEqual(bootData.tasks, [], 'Should start with 0 mock tasks');
-
-  // 2. Create two projects and two members
-  const proj1Res = await fetch(`${baseUrl}/api/projects`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  // 2. Create two projects and a collaborator
+  const proj1Res = await api('POST', '/api/projects', {
+    token,
+    body: {
       name: 'Flow 核心引擎',
       code: 'FLW',
       color: '#6366f1',
       description: '多维看板与 AI 助理架构',
-    }),
+    },
   });
   assert.equal(proj1Res.status, 201);
-  const targetProject = await proj1Res.json();
+  const targetProject = proj1Res.data;
 
-  const proj2Res = await fetch(`${baseUrl}/api/projects`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: '移动端适配',
-      code: 'APP',
-      color: '#10b981',
-    }),
-  });
-  const secondProject = await proj2Res.json();
+  const secondProject = (
+    await api('POST', '/api/projects', {
+      token,
+      body: { name: '移动端适配', code: 'APP', color: '#10b981' },
+    })
+  ).data;
 
-  const mem1Res = await fetch(`${baseUrl}/api/members`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: '张明',
-      role: '前端架构师',
-      capacity_hours: 40,
-    }),
-  });
-  const targetAssignee = await mem1Res.json();
-
-  const mem2Res = await fetch(`${baseUrl}/api/members`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: '李薇',
-      role: '产品设计师',
-      capacity_hours: 36,
-    }),
-  });
-  const targetCollab = await mem2Res.json();
+  const targetCollab = (
+    await api('POST', '/api/members', {
+      token,
+      body: { name: '李薇', role: '产品设计师', capacity_hours: 36 },
+    })
+  ).data;
 
   // 3. Create a new task with core fields & verify auto task_key generation
-  const createRes = await fetch(`${baseUrl}/api/tasks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const createRes = await api('POST', '/api/tasks', {
+    token,
+    body: {
       title: '完成多维看板拖拽联动自动化验证',
       description: '验证状态、项目、人员、截止日期跨列拖拽自动同步落盘',
       project_id: targetProject.id,
@@ -103,10 +67,10 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
       collaborator_ids: [targetCollab.id],
       tags: ['核心体验', '自动化测试'],
       estimate_hours: 6,
-    }),
+    },
   });
   assert.equal(createRes.status, 201);
-  const createdTask = await createRes.json();
+  const createdTask = createRes.data;
   assert.equal(createdTask.title, '完成多维看板拖拽联动自动化验证');
   assert.equal(createdTask.task_key, 'FLW-101');
   assert.equal(createdTask.project_id, targetProject.id);
@@ -115,118 +79,103 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   assert.equal(createdTask.due_date, '2026-10-25');
 
   // 4. Patch task across boards (status, project_id, assignee_id, due_date, logged_minutes)
-  const patchRes = await fetch(`${baseUrl}/api/tasks/${createdTask.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const patchRes = await api('PATCH', `/api/tasks/${createdTask.id}`, {
+    token,
+    body: {
       status: 'in_progress',
       project_id: secondProject.id,
       assignee_id: targetCollab.id,
       due_date: '2026-10-22',
       logged_minutes: 50,
-    }),
+    },
   });
   assert.equal(patchRes.status, 200);
-  const patchedTask = await patchRes.json();
+  const patchedTask = patchRes.data;
   assert.equal(patchedTask.status, 'in_progress');
   assert.equal(patchedTask.project_id, secondProject.id);
   assert.equal(patchedTask.assignee_id, targetCollab.id);
   assert.equal(patchedTask.due_date, '2026-10-22');
   assert.equal(patchedTask.logged_minutes, 50);
   assert.ok(patchedTask.activities.length >= 2, 'Should record system activity logs on changes');
+  // The audit entry names the account that made the change, not the new assignee
+  const changeLog = patchedTask.activities.find((a) => a.content.includes('状态变更'));
+  assert.equal(changeLog.member_id, targetAssignee.id);
+  assert.equal(changeLog.actor_name, '张明');
 
   // 5. Add & toggle subtask (verify completed_at timestamp is automatically set and cleared)
-  const subRes = await fetch(`${baseUrl}/api/tasks/${createdTask.id}/subtasks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: '编写 SQLite 持久化断言' }),
+  const subRes = await api('POST', `/api/tasks/${createdTask.id}/subtasks`, {
+    token,
+    body: { title: '编写 SQLite 持久化断言' },
   });
   assert.equal(subRes.status, 201);
-  const subtask = await subRes.json();
+  const subtask = subRes.data;
   assert.equal(subtask.completed, false);
   assert.equal(subtask.completed_at, null);
 
-  const toggleRes = await fetch(`${baseUrl}/api/subtasks/${subtask.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ completed: true }),
+  const toggleRes = await api('PATCH', `/api/subtasks/${subtask.id}`, {
+    token,
+    body: { completed: true },
   });
   assert.equal(toggleRes.status, 200);
-  const toggledSub = await toggleRes.json();
-  assert.equal(toggledSub.completed, true);
+  assert.equal(toggleRes.data.completed, true);
   assert.ok(
-    typeof toggledSub.completed_at === 'string' &&
-      toggledSub.completed_at.length > 0,
+    typeof toggleRes.data.completed_at === 'string' &&
+      toggleRes.data.completed_at.length > 0,
     'completed_at should be recorded when subtask is completed'
   );
 
-  const uncheckRes = await fetch(`${baseUrl}/api/subtasks/${subtask.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ completed: false }),
-  });
-  const uncheckedSub = await uncheckRes.json();
+  const uncheckedSub = (
+    await api('PATCH', `/api/subtasks/${subtask.id}`, {
+      token,
+      body: { completed: false },
+    })
+  ).data;
   assert.equal(uncheckedSub.completed, false);
   assert.equal(uncheckedSub.completed_at, null);
 
   // 6. Add a comment activity
-  const commentRes = await fetch(`${baseUrl}/api/tasks/${createdTask.id}/comments`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      member_id: targetAssignee.id,
-      content: '接口响应速度非常快，已完成联调！',
-    }),
+  const commentRes = await api('POST', `/api/tasks/${createdTask.id}/comments`, {
+    token,
+    body: { content: '接口响应速度非常快，已完成联调！' },
   });
   assert.equal(commentRes.status, 201);
-  const comment = await commentRes.json();
-  assert.equal(comment.type, 'comment');
-  assert.equal(comment.content, '接口响应速度非常快，已完成联调！');
+  assert.equal(commentRes.data.type, 'comment');
+  assert.equal(commentRes.data.content, '接口响应速度非常快，已完成联调！');
+  assert.equal(commentRes.data.member_id, targetAssignee.id);
 
   // 7. Edit Project & Pin (PATCH /api/projects/:id)
-  const editProjRes = await fetch(`${baseUrl}/api/projects/${secondProject.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  const editProjRes = await api('PATCH', `/api/projects/${secondProject.id}`, {
+    token,
+    body: {
       name: '移动端 4.0 架构',
       code: 'MOB',
       color: '#ec4899',
       description: '全新跨端渲染引擎',
       pinned: true,
-    }),
+    },
   });
   assert.equal(editProjRes.status, 200);
-  const editedProj = await editProjRes.json();
-  assert.equal(editedProj.name, '移动端 4.0 架构');
-  assert.equal(editedProj.code, 'MOB');
-  assert.equal(editedProj.color, '#ec4899');
-  assert.equal(editedProj.pinned, true);
+  assert.equal(editProjRes.data.name, '移动端 4.0 架构');
+  assert.equal(editProjRes.data.code, 'MOB');
+  assert.equal(editProjRes.data.color, '#ec4899');
+  assert.equal(editProjRes.data.pinned, true);
 
   // 8. Edit Member & Pin (PATCH /api/members/:id)
-  const editMemRes = await fetch(`${baseUrl}/api/members/${targetCollab.id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: '李薇薇',
-      role: '设计总监',
-      capacity_hours: 32,
-      pinned: true,
-    }),
+  const editMemRes = await api('PATCH', `/api/members/${targetCollab.id}`, {
+    token,
+    body: { name: '李薇薇', role: '设计总监', capacity_hours: 32, pinned: true },
   });
   assert.equal(editMemRes.status, 200);
-  const editedMem = await editMemRes.json();
-  assert.equal(editedMem.name, '李薇薇');
-  assert.equal(editedMem.role, '设计总监');
-  assert.equal(editedMem.capacity_hours, 32);
-  assert.equal(editedMem.pinned, true);
+  assert.equal(editMemRes.data.name, '李薇薇');
+  assert.equal(editMemRes.data.role, '设计总监');
+  assert.equal(editMemRes.data.capacity_hours, 32);
+  assert.equal(editMemRes.data.pinned, true);
 
-  // 9. Delete Member (DELETE /api/members/:id) and verify tasks are unassigned safely without being deleted
-  const delMemRes = await fetch(`${baseUrl}/api/members/${targetCollab.id}`, {
-    method: 'DELETE',
-  });
+  // 9. Delete Member and verify tasks are unassigned safely without being deleted
+  const delMemRes = await api('DELETE', `/api/members/${targetCollab.id}`, { token });
   assert.equal(delMemRes.status, 200);
 
-  const afterMemDelBoot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
+  const afterMemDelBoot = (await api('GET', '/api/bootstrap', { token })).data;
   assert.equal(afterMemDelBoot.members.length, 1);
   const taskAfterMemDel = afterMemDelBoot.tasks.find((item) => item.id === createdTask.id);
   assert.ok(taskAfterMemDel, 'Task should still exist after its assignee is deleted');
@@ -237,44 +186,17 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
     'Deleted member should be removed from collaborator_ids'
   );
 
-  // 10. Delete Project (DELETE /api/projects/:id) and verify cascade cleanup
-  const delProjRes = await fetch(`${baseUrl}/api/projects/${secondProject.id}`, {
-    method: 'DELETE',
-  });
+  // 10. Delete Project and verify cascade cleanup
+  const delProjRes = await api('DELETE', `/api/projects/${secondProject.id}`, { token });
   assert.equal(delProjRes.status, 200);
-  const afterProjDelBoot = await (await fetch(`${baseUrl}/api/bootstrap`)).json();
+  const afterProjDelBoot = (await api('GET', '/api/bootstrap', { token })).data;
   assert.equal(afterProjDelBoot.projects.length, 1);
   assert.equal(afterProjDelBoot.tasks.length, 0);
 
-  // 11. First-Time Super Admin Setup, Login, 5-Tier RBAC & Member Binding
-  const statusBefore = await (await fetch(`${baseUrl}/api/auth/status`)).json();
-  assert.equal(statusBefore.initialized, false);
-  assert.equal(statusBefore.user, null);
-
-  const setupRes = await fetch(`${baseUrl}/api/auth/setup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: 'admin',
-      display_name: '系统超级管理员',
-      password: 'admin-password-123',
-      bind_member_name: '张明',
-    }),
-  });
-  assert.equal(setupRes.status, 201);
-  const setupData = await setupRes.json();
-  assert.ok(setupData.token);
-  assert.equal(setupData.user.role, 'admin');
-  assert.equal(setupData.user.member_id, targetAssignee.id);
-
-  // Create a Lead account bound to a newly created member and restricted to targetProject
-  const createLeadRes = await fetch(`${baseUrl}/api/users`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${setupData.token}`,
-    },
-    body: JSON.stringify({
+  // 11. 5-Tier RBAC: a Lead account bound to a new member and restricted to targetProject
+  const createLeadRes = await api('POST', '/api/users', {
+    token,
+    body: {
       username: 'teamlead',
       display_name: '王组长',
       password: 'lead-password',
@@ -291,62 +213,45 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
         can_manage_members: false,
         can_manage_accounts: false,
       },
-    }),
+    },
   });
   assert.equal(createLeadRes.status, 201);
-  const leadUser = await createLeadRes.json();
+  const leadUser = createLeadRes.data;
   assert.equal(leadUser.role, 'lead');
   assert.ok(leadUser.member_id, 'Should auto-create and bind a member');
   assert.deepEqual(leadUser.permissions.visible_project_ids, [targetProject.id]);
 
   // 12. Custom Project Communication Group Chats CRUD & Messaging
-  const createGroupRes = await fetch(`${baseUrl}/api/chat-groups`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${setupData.token}`,
-    },
-    body: JSON.stringify({
+  const createGroupRes = await api('POST', '/api/chat-groups', {
+    token,
+    body: {
       name: 'Flow 架构攻坚群',
       description: '核心研发实时沟通',
       project_id: targetProject.id,
       member_ids: [targetAssignee.id],
-    }),
+    },
   });
   assert.equal(createGroupRes.status, 201);
-  const chatGroup = await createGroupRes.json();
+  const chatGroup = createGroupRes.data;
   assert.equal(chatGroup.name, 'Flow 架构攻坚群');
   assert.equal(chatGroup.project_id, targetProject.id);
 
-  const sendMsgRes = await fetch(
-    `${baseUrl}/api/chat-groups/${chatGroup.id}/messages`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${setupData.token}`,
-      },
-      body: JSON.stringify({
-        content: '@张明 请关注 #FLW-101 子任务进度',
-      }),
-    }
-  );
+  const sendMsgRes = await api('POST', `/api/chat-groups/${chatGroup.id}/messages`, {
+    token,
+    body: { content: '@张明 请关注 #FLW-101 子任务进度' },
+  });
   assert.equal(sendMsgRes.status, 201);
-  const sentMsg = await sendMsgRes.json();
+  const sentMsg = sendMsgRes.data;
   assert.equal(sentMsg.sender_name, '张明');
   assert.equal(sentMsg.sender_member_id, targetAssignee.id);
 
-  const listMsgRes = await fetch(
-    `${baseUrl}/api/chat-groups/${chatGroup.id}/messages`
-  );
+  const listMsgRes = await api('GET', `/api/chat-groups/${chatGroup.id}/messages`, { token });
   assert.equal(listMsgRes.status, 200);
-  const { messages } = await listMsgRes.json();
-  assert.equal(messages.length, 1);
+  assert.equal(listMsgRes.data.messages.length, 1);
 
-  const listGroupsRes = await fetch(`${baseUrl}/api/chat-groups`);
+  const listGroupsRes = await api('GET', '/api/chat-groups', { token });
   assert.equal(listGroupsRes.status, 200);
-  const { groups } = await listGroupsRes.json();
-  const updatedChatGroup = groups.find((g) => g.id === chatGroup.id);
+  const updatedChatGroup = listGroupsRes.data.groups.find((g) => g.id === chatGroup.id);
   assert.ok(updatedChatGroup);
   assert.equal(updatedChatGroup.last_message_id, sentMsg.id);
   assert.equal(updatedChatGroup.last_message_sender, '张明');

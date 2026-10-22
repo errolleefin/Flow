@@ -1,6 +1,41 @@
 import crypto from 'node:crypto';
 import { getTodayISO } from '../src/utils/dateUtils.ts';
-import { getFullTaskById } from './db.mjs';
+import {
+  getFullTaskById,
+  canSeeProject,
+  grantProjectVisibility,
+} from './db.mjs';
+
+const AI_CHAT_TIMEOUT_MS = 90 * 1000;
+const AI_MODELS_TIMEOUT_MS = 15 * 1000;
+
+const WELCOME_MESSAGE =
+  '你好！我是 **Flow AI 智能助理**。你可以先在右上角「接口配置」中永久保存你的 OpenAI 兼容 API（支持 OpenAI、DeepSeek、硅基流动、OpenRouter、阿里云百炼、本地 Ollama 等），然后直接用自然语言向我发送任务指令或粘贴会议纪要，我会自动为你提取 **任务名称、所属项目、截止日期、相关人员（主负责与协作人）、优先级与子任务清单** 并录入数据库！';
+
+// Each action needs the same permission as its REST counterpart.
+const ACTION_PERMISSIONS = {
+  create_project: 'can_create_project',
+  update_project: 'can_edit_project',
+  delete_project: 'can_delete_project',
+  create_member: 'can_manage_members',
+  update_member: 'can_manage_members',
+  delete_member: 'can_manage_members',
+  create_task: 'can_create_task',
+  update_task: 'can_edit_task',
+  delete_task: 'can_delete_task',
+};
+
+const ACTION_LABELS = {
+  create_project: '新建项目',
+  update_project: '编辑项目',
+  delete_project: '删除项目',
+  create_member: '新增成员',
+  update_member: '编辑成员',
+  delete_member: '删除成员',
+  create_task: '创建任务',
+  update_task: '更新任务',
+  delete_task: '删除任务',
+};
 
 const PROJECT_PALETTE = [
   '#6366f1',
@@ -24,6 +59,20 @@ const AVATAR_PALETTE = [
 
 function escapeLike(value) {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (err?.name === 'TimeoutError') {
+      throw new Error('AI 接口请求超时，请稍后重试或检查接口配置');
+    }
+    throw err;
+  }
 }
 
 export function normalizeOpenAIEndpoint(baseUrl, type = 'chat') {
@@ -79,18 +128,36 @@ export async function updateAiSettings(db, patch) {
   return getAiSettings(db);
 }
 
-export async function getAiMessages(db) {
+// History is per account; legacy rows without an owner are shown to admins only.
+export async function getAiMessages(db, user) {
   const rows = await db.all(
-    'SELECT * FROM ai_messages ORDER BY created_at ASC'
+    'SELECT * FROM ai_messages WHERE user_id = ? OR (user_id IS NULL AND ?) ORDER BY created_at ASC',
+    user.id,
+    user.role === 'admin'
   );
+  if (rows.length === 0) {
+    return [
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: WELCOME_MESSAGE,
+        operations: [],
+        created_at: new Date().toISOString(),
+      },
+    ];
+  }
   return rows.map((r) => ({
     ...r,
     operations: JSON.parse(r.operations || '[]'),
   }));
 }
 
-export async function clearAiMessages(db) {
-  await db.exec('DELETE FROM ai_messages;');
+export async function clearAiMessages(db, user) {
+  await db.run(
+    'DELETE FROM ai_messages WHERE user_id = ? OR (user_id IS NULL AND ?)',
+    user.id,
+    user.role === 'admin'
+  );
   const nowISO = new Date().toISOString();
   const welcome = {
     id: crypto.randomUUID(),
@@ -101,8 +168,9 @@ export async function clearAiMessages(db) {
     created_at: nowISO,
   };
   await db.run(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO ai_messages (id, user_id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     welcome.id,
+    user.id,
     welcome.role,
     welcome.content,
     '[]',
@@ -111,21 +179,26 @@ export async function clearAiMessages(db) {
   return [welcome];
 }
 
-export async function buildSystemPrompt(db) {
+// Only data the user may see is shown to the model.
+export async function buildSystemPrompt(db, user) {
   const today = getTodayISO();
   const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   const [y, m, d] = today.split('-').map(Number);
   const weekdayLabel = weekDays[new Date(y, m - 1, d).getDay()];
 
-  const projects = await db.all(
-    'SELECT id, name, code, description FROM projects'
-  );
+  const projects = (
+    await db.all('SELECT id, name, code, description FROM projects')
+  ).filter((p) => canSeeProject(user, p.id));
   const members = await db.all(
     'SELECT id, name, role, capacity_hours FROM members'
   );
-  const tasks = await db.all(
-    'SELECT id, task_key, title, project_id, status, priority, due_date, assignee_id FROM tasks ORDER BY created_at DESC LIMIT 40'
-  );
+  const tasks = (
+    await db.all(
+      'SELECT id, task_key, title, project_id, status, priority, due_date, assignee_id FROM tasks ORDER BY created_at DESC'
+    )
+  )
+    .filter((t) => canSeeProject(user, t.project_id))
+    .slice(0, 40);
 
   const projMap = new Map(projects.map((p) => [p.id, p.name]));
   const memMap = new Map(members.map((mem) => [mem.id, mem.name]));
@@ -298,25 +371,32 @@ export function parseAiJsonResponse(rawContent) {
   };
 }
 
-async function findOrCreateProjectByName(db, projectName, operations) {
+// Matches only projects the user can see, and creates one only when the user
+// may create projects; returns null otherwise.
+async function findOrCreateProjectByName(db, projectName, operations, user) {
   const allProjects = await db.all('SELECT * FROM projects');
-  if (!projectName || !String(projectName).trim()) {
-    return allProjects[0];
+  const visibleProjects = allProjects.filter((p) => canSeeProject(user, p.id));
+  const hasName = Boolean(projectName && String(projectName).trim());
+  if (!hasName && visibleProjects.length > 0) {
+    return visibleProjects[0];
   }
-  const clean = String(projectName).trim();
-  const exact = allProjects.find(
-    (p) =>
-      p.name.toLowerCase() === clean.toLowerCase() ||
-      p.code.toLowerCase() === clean.toLowerCase()
-  );
-  if (exact) return exact;
+  const clean = hasName ? String(projectName).trim() : '默认工作项目';
+  if (hasName) {
+    const exact = visibleProjects.find(
+      (p) =>
+        p.name.toLowerCase() === clean.toLowerCase() ||
+        p.code.toLowerCase() === clean.toLowerCase()
+    );
+    if (exact) return exact;
 
-  const partial = allProjects.find(
-    (p) =>
-      p.name.toLowerCase().includes(clean.toLowerCase()) ||
-      clean.toLowerCase().includes(p.name.toLowerCase())
-  );
-  if (partial) return partial;
+    const partial = visibleProjects.find(
+      (p) =>
+        p.name.toLowerCase().includes(clean.toLowerCase()) ||
+        clean.toLowerCase().includes(p.name.toLowerCase())
+    );
+    if (partial) return partial;
+  }
+  if (!user.permissions.can_create_project) return null;
 
   // Auto-create project if not found
   const id = `proj-${crypto.randomUUID().slice(0, 8)}`;
@@ -337,6 +417,7 @@ async function findOrCreateProjectByName(db, projectName, operations) {
     `由 AI 助理自动创建的项目「${clean}」`,
     nowISO
   );
+  await grantProjectVisibility(db, user, id);
 
   const created = await db.get('SELECT * FROM projects WHERE id = ?', id);
   operations.push({
@@ -348,7 +429,13 @@ async function findOrCreateProjectByName(db, projectName, operations) {
   return created;
 }
 
-async function findOrCreateMemberByName(db, memberName, roleHint, operations) {
+async function findOrCreateMemberByName(
+  db,
+  memberName,
+  roleHint,
+  operations,
+  allowCreate
+) {
   if (!memberName || !String(memberName).trim()) return null;
   const clean = String(memberName).trim();
   const allMembers = await db.all('SELECT * FROM members');
@@ -358,6 +445,7 @@ async function findOrCreateMemberByName(db, memberName, roleHint, operations) {
       m.name.toLowerCase().includes(clean.toLowerCase())
   );
   if (found) return found;
+  if (!allowCreate) return null;
 
   const id = `mem-${crypto.randomUUID().slice(0, 8)}`;
   const avatarBg = AVATAR_PALETTE[allMembers.length % AVATAR_PALETTE.length];
@@ -383,14 +471,29 @@ async function findOrCreateMemberByName(db, memberName, roleHint, operations) {
   return created;
 }
 
-export async function executeAiActions(db, actions) {
+// Applies model-proposed actions with the requesting user's permissions and
+// project visibility; anything not allowed is reported in `skipped`.
+export async function executeAiActions(db, actions, user) {
   const operations = [];
-  if (!Array.isArray(actions)) return operations;
+  const skipped = [];
+  if (!Array.isArray(actions)) return { operations, skipped };
+  const canCreateMembers = Boolean(user.permissions.can_manage_members);
+  const skip = (act, reason) => {
+    const target = act.title || act.name || act.task_key;
+    skipped.push(
+      `${ACTION_LABELS[act.type]}${target ? `「${target}」` : ''}：${reason}`
+    );
+  };
 
   for (const act of actions) {
     if (!act || typeof act !== 'object') continue;
     const type = act.type;
     const nowISO = new Date().toISOString();
+    if (!ACTION_PERMISSIONS[type]) continue;
+    if (!user.permissions[ACTION_PERMISSIONS[type]]) {
+      skip(act, '当前账号无此操作权限');
+      continue;
+    }
 
     if (type === 'create_project' && act.name) {
       const existing = await db.get(
@@ -415,6 +518,7 @@ export async function executeAiActions(db, actions) {
           act.description || '',
           nowISO
         );
+        await grantProjectVisibility(db, user, id);
         operations.push({
           kind: 'project_created',
           id,
@@ -423,21 +527,38 @@ export async function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'create_member' && act.name) {
-      await findOrCreateMemberByName(db, act.name, act.role, operations);
+      await findOrCreateMemberByName(db, act.name, act.role, operations, true);
     } else if (type === 'create_task' && act.title) {
       const proj = await findOrCreateProjectByName(
         db,
         act.project_name || act.project,
-        operations
+        operations,
+        user
       );
+      if (!proj) {
+        skip(act, '没有可用的项目');
+        continue;
+      }
       const assignee = act.assignee_name
-        ? await findOrCreateMemberByName(db, act.assignee_name, null, operations)
+        ? await findOrCreateMemberByName(
+            db,
+            act.assignee_name,
+            null,
+            operations,
+            canCreateMembers
+          )
         : null;
 
       const collabIds = [];
       if (Array.isArray(act.collaborator_names)) {
         for (const cName of act.collaborator_names) {
-          const mem = await findOrCreateMemberByName(db, cName, null, operations);
+          const mem = await findOrCreateMemberByName(
+            db,
+            cName,
+            null,
+            operations,
+            canCreateMembers
+          );
           if (mem && !collabIds.includes(mem.id)) {
             collabIds.push(mem.id);
           }
@@ -496,10 +617,11 @@ export async function executeAiActions(db, actions) {
       );
 
       await db.run(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO activities (id, task_id, member_id, actor_name, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         crypto.randomUUID(),
         taskId,
-        assignee ? assignee.id : null,
+        user.member_id || null,
+        user.display_name,
         'system',
         `由 AI 智能助理整理录入任务 [${taskKey}]`,
         nowISO
@@ -546,123 +668,156 @@ export async function executeAiActions(db, actions) {
           `%${escapeLike(String(act.title).trim().toLowerCase())}%`
         );
       }
-      if (existing) {
-        const nextTitle = act.new_title || existing.title;
-        const nextStatus = act.status || existing.status;
-        const nextPriority = act.priority || existing.priority;
-        const nextDueDate =
-          act.due_date !== undefined ? act.due_date : existing.due_date;
-        const nextProject = act.project_name
-          ? await findOrCreateProjectByName(db, act.project_name, operations)
-          : null;
-        const nextAssignee = act.assignee_name
-          ? await findOrCreateMemberByName(db, act.assignee_name, null, operations)
-          : null;
-
-        let nextCollabJson = existing.collaborator_ids;
-        if (Array.isArray(act.collaborator_names)) {
-          const ids = [];
-          for (const cn of act.collaborator_names) {
-            const m = await findOrCreateMemberByName(db, cn, null, operations);
-            if (m) ids.push(m.id);
-          }
-          nextCollabJson = JSON.stringify(ids);
-        }
-
-        await db.run(
-          `UPDATE tasks SET
-            title = ?,
-            status = ?,
-            priority = ?,
-            due_date = ?,
-            project_id = ?,
-            assignee_id = ?,
-            collaborator_ids = ?,
-            updated_at = ?
-          WHERE id = ?`,
-          nextTitle,
-          nextStatus,
-          nextPriority,
-          nextDueDate,
-          nextProject ? nextProject.id : existing.project_id,
-          nextAssignee ? nextAssignee.id : existing.assignee_id,
-          nextCollabJson,
-          nowISO,
-          existing.id
-        );
-
-        await db.run(
-          'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          crypto.randomUUID(),
-          existing.id,
-          existing.assignee_id,
-          'system',
-          `AI 助理更新了任务属性 (状态: ${nextStatus}, 截止: ${nextDueDate || '未排期'})`,
-          nowISO
-        );
-
-        const updatedFull = await getFullTaskById(db, existing.id);
-        operations.push({
-          kind: 'task_updated',
-          id: existing.id,
-          task_key: existing.task_key,
-          title: updatedFull.title,
-          due_date: updatedFull.due_date || '未排期',
-          summary: `更新任务 [${existing.task_key}] ${updatedFull.title} -> 状态: ${updatedFull.status}`,
-        });
+      if (existing && !canSeeProject(user, existing.project_id)) {
+        existing = null;
       }
+      if (!existing) {
+        skip(act, '未找到该任务');
+        continue;
+      }
+      const nextTitle = act.new_title || existing.title;
+      const nextStatus = act.status || existing.status;
+      const nextPriority = act.priority || existing.priority;
+      const nextDueDate =
+        act.due_date !== undefined ? act.due_date : existing.due_date;
+      const nextProject = act.project_name
+        ? await findOrCreateProjectByName(
+            db,
+            act.project_name,
+            operations,
+            user
+          )
+        : null;
+      if (act.project_name && !nextProject) {
+        skip(act, '没有可用的目标项目');
+        continue;
+      }
+      const nextAssignee = act.assignee_name
+        ? await findOrCreateMemberByName(
+            db,
+            act.assignee_name,
+            null,
+            operations,
+            canCreateMembers
+          )
+        : null;
+
+      let nextCollabJson = existing.collaborator_ids;
+      if (Array.isArray(act.collaborator_names)) {
+        const ids = [];
+        for (const cn of act.collaborator_names) {
+          const m = await findOrCreateMemberByName(
+            db,
+            cn,
+            null,
+            operations,
+            canCreateMembers
+          );
+          if (m) ids.push(m.id);
+        }
+        nextCollabJson = JSON.stringify(ids);
+      }
+
+      await db.run(
+        `UPDATE tasks SET
+          title = ?,
+          status = ?,
+          priority = ?,
+          due_date = ?,
+          project_id = ?,
+          assignee_id = ?,
+          collaborator_ids = ?,
+          updated_at = ?
+        WHERE id = ?`,
+        nextTitle,
+        nextStatus,
+        nextPriority,
+        nextDueDate,
+        nextProject ? nextProject.id : existing.project_id,
+        nextAssignee ? nextAssignee.id : existing.assignee_id,
+        nextCollabJson,
+        nowISO,
+        existing.id
+      );
+
+      await db.run(
+        'INSERT INTO activities (id, task_id, member_id, actor_name, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        crypto.randomUUID(),
+        existing.id,
+        user.member_id || null,
+        user.display_name,
+        'system',
+        `AI 助理更新了任务属性 (状态: ${nextStatus}, 截止: ${nextDueDate || '未排期'})`,
+        nowISO
+      );
+
+      const updatedFull = await getFullTaskById(db, existing.id);
+      operations.push({
+        kind: 'task_updated',
+        id: existing.id,
+        task_key: existing.task_key,
+        title: updatedFull.title,
+        due_date: updatedFull.due_date || '未排期',
+        summary: `更新任务 [${existing.task_key}] ${updatedFull.title} -> 状态: ${updatedFull.status}`,
+      });
     } else if (type === 'delete_task' && act.task_key) {
       const existing = await db.get(
         'SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)',
         String(act.task_key).trim()
       );
-      if (existing) {
-        await db.run('DELETE FROM tasks WHERE id = ?', existing.id);
-        operations.push({
-          kind: 'task_deleted',
-          id: existing.id,
-          task_key: existing.task_key,
-          title: existing.title,
-          summary: `删除任务 [${existing.task_key}] ${existing.title}`,
-        });
+      if (!existing || !canSeeProject(user, existing.project_id)) {
+        skip(act, '未找到该任务');
+        continue;
       }
+      await db.run('DELETE FROM tasks WHERE id = ?', existing.id);
+      operations.push({
+        kind: 'task_deleted',
+        id: existing.id,
+        task_key: existing.task_key,
+        title: existing.title,
+        summary: `删除任务 [${existing.task_key}] ${existing.title}`,
+      });
     } else if (type === 'update_project' && act.name) {
       const existing = await db.get(
         'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
         String(act.name).trim()
       );
-      if (existing) {
-        const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
-        const nextCode = act.code ? String(act.code).trim().toUpperCase() : existing.code;
-        const nextDesc = act.description !== undefined ? String(act.description) : existing.description;
-        await db.run(
-          'UPDATE projects SET name = ?, code = ?, description = ? WHERE id = ?',
-          nextName,
-          nextCode,
-          nextDesc,
-          existing.id
-        );
-        operations.push({
-          kind: 'project_created',
-          id: existing.id,
-          title: nextName,
-          summary: `已更新项目 [${nextCode}] ${nextName}`,
-        });
+      if (!existing || !canSeeProject(user, existing.id)) {
+        skip(act, '未找到该项目');
+        continue;
       }
+      const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
+      const nextCode = act.code ? String(act.code).trim().toUpperCase() : existing.code;
+      const nextDesc = act.description !== undefined ? String(act.description) : existing.description;
+      await db.run(
+        'UPDATE projects SET name = ?, code = ?, description = ? WHERE id = ?',
+        nextName,
+        nextCode,
+        nextDesc,
+        existing.id
+      );
+      operations.push({
+        kind: 'project_created',
+        id: existing.id,
+        title: nextName,
+        summary: `已更新项目 [${nextCode}] ${nextName}`,
+      });
     } else if (type === 'delete_project' && act.name) {
       const existing = await db.get(
         'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
         String(act.name).trim()
       );
-      if (existing) {
-        await db.run('DELETE FROM projects WHERE id = ?', existing.id);
-        operations.push({
-          kind: 'task_deleted',
-          id: existing.id,
-          title: existing.name,
-          summary: `已删除项目「${existing.name}」`,
-        });
+      if (!existing || !canSeeProject(user, existing.id)) {
+        skip(act, '未找到该项目');
+        continue;
       }
+      await db.run('DELETE FROM projects WHERE id = ?', existing.id);
+      operations.push({
+        kind: 'task_deleted',
+        id: existing.id,
+        title: existing.name,
+        summary: `已删除项目「${existing.name}」`,
+      });
     } else if (type === 'update_member' && act.name) {
       const existing = await db.get(
         'SELECT * FROM members WHERE LOWER(name) = LOWER(?)',
@@ -718,10 +873,10 @@ export async function executeAiActions(db, actions) {
     }
   }
 
-  return operations;
+  return { operations, skipped };
 }
 
-export async function processAiChat(db, userMessage) {
+export async function processAiChat(db, userMessage, user) {
   const settings = await getAiSettings(db);
   if (!settings.base_url || !settings.model) {
     throw new Error('请先在 AI 助理配置中填写 Base URL 与模型名称 (Model)');
@@ -730,8 +885,9 @@ export async function processAiChat(db, userMessage) {
   const nowISO = new Date().toISOString();
   const userMsgId = crypto.randomUUID();
   await db.run(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO ai_messages (id, user_id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     userMsgId,
+    user.id,
     'user',
     String(userMessage).trim(),
     '[]',
@@ -740,7 +896,8 @@ export async function processAiChat(db, userMessage) {
 
   const recentMessages = (
     await db.all(
-      'SELECT role, content FROM ai_messages ORDER BY created_at DESC LIMIT 8'
+      'SELECT role, content FROM ai_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT 8',
+      user.id
     )
   ).reverse();
 
@@ -753,22 +910,26 @@ export async function processAiChat(db, userMessage) {
   }
 
   const apiMessages = [
-    { role: 'system', content: await buildSystemPrompt(db) },
+    { role: 'system', content: await buildSystemPrompt(db, user) },
     ...recentMessages.map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
     })),
   ];
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: settings.model,
-      messages: apiMessages,
-      temperature: Number(settings.temperature ?? 0.2),
-    }),
-  });
+  const response = await fetchWithTimeout(
+    endpoint,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: settings.model,
+        messages: apiMessages,
+        temperature: Number(settings.temperature ?? 0.2),
+      }),
+    },
+    AI_CHAT_TIMEOUT_MS
+  );
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
@@ -780,21 +941,28 @@ export async function processAiChat(db, userMessage) {
   const data = await response.json();
   const rawContent = data?.choices?.[0]?.message?.content || '';
   const parsed = parseAiJsonResponse(rawContent);
-  const operations = await db.transaction((tx) =>
-    executeAiActions(tx, parsed.actions)
+  const { operations, skipped } = await db.transaction((tx) =>
+    executeAiActions(tx, parsed.actions, user)
   );
+  const reply =
+    skipped.length > 0
+      ? `${parsed.reply}\n\n⚠️ 以下操作未执行：\n${skipped
+          .map((item) => `- ${item}`)
+          .join('\n')}`
+      : parsed.reply;
 
   const assistantMsg = {
     id: crypto.randomUUID(),
     role: 'assistant',
-    content: parsed.reply,
+    content: reply,
     operations,
     created_at: new Date().toISOString(),
   };
 
   await db.run(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO ai_messages (id, user_id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     assistantMsg.id,
+    user.id,
     assistantMsg.role,
     assistantMsg.content,
     JSON.stringify(operations),
@@ -813,10 +981,11 @@ export async function fetchOpenAIModels(baseUrl, apiKey) {
     headers['Authorization'] = `Bearer ${String(apiKey).trim()}`;
   }
 
-  const res = await fetch(endpoint, {
-    method: 'GET',
-    headers,
-  });
+  const res = await fetchWithTimeout(
+    endpoint,
+    { method: 'GET', headers },
+    AI_MODELS_TIMEOUT_MS
+  );
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');

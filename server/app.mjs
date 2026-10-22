@@ -13,6 +13,9 @@ import {
   verifyPassword,
   serializeUser,
   normalizePermissions,
+  canSeeProject,
+  grantProjectVisibility,
+  DEFAULT_ROLE_PERMISSIONS,
 } from './db.mjs';
 import {
   getAiSettings,
@@ -21,6 +24,7 @@ import {
   clearAiMessages,
   processAiChat,
   fetchOpenAIModels,
+  normalizeOpenAIEndpoint,
 } from './aiService.mjs';
 
 const STATUS_LABELS = {
@@ -46,6 +50,35 @@ const ROLE_LABELS = {
   member: '成员',
 };
 
+// Routes reachable without a session; everything else under /api needs one.
+const PUBLIC_API_ROUTES = new Set([
+  'GET /api/auth/status',
+  'POST /api/auth/setup',
+  'POST /api/auth/login',
+  'POST /api/auth/logout',
+]);
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 10;
+const MIN_PASSWORD_LENGTH = 4;
+const ACCOUNT_ROLES = Object.keys(DEFAULT_ROLE_PERMISSIONS);
+
+function maskApiKey(key) {
+  if (!key) return '';
+  if (key.length <= 8) return '••••';
+  return `${key.slice(0, 3)}••••${key.slice(-4)}`;
+}
+
+// Never send the stored API key back to the browser.
+function toPublicAiSettings(settings) {
+  return {
+    ...settings,
+    api_key: '',
+    has_api_key: Boolean(settings.api_key),
+    api_key_masked: maskApiKey(settings.api_key),
+  };
+}
+
 export function createApp(options = {}) {
   const {
     dbPath = path.resolve('data/flow.sqlite'),
@@ -58,9 +91,18 @@ export function createApp(options = {}) {
     return opened;
   });
   ready.catch(() => {});
+  const sessionTtlMs =
+    (Number(process.env.FLOW_SESSION_TTL_DAYS) || 30) * 24 * 60 * 60 * 1000;
   const app = express();
 
-  app.use(cors());
+  // Same-origin by default (Vite proxies /api in dev); opt in for other origins.
+  const corsOrigins = (process.env.FLOW_CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (corsOrigins.length > 0) {
+    app.use(cors({ origin: corsOrigins }));
+  }
   app.use(express.json({ limit: '5mb' }));
   app.use('/api', async (_req, res, next) => {
     try {
@@ -73,21 +115,128 @@ export function createApp(options = {}) {
     }
   });
 
-  const getCurrentUser = async (req) => {
+  const getBearerToken = (req) => {
     const authHeader = req.headers.authorization || '';
     if (!authHeader.startsWith('Bearer ')) return null;
-    const token = authHeader.slice(7).trim();
+    return authHeader.slice(7).trim() || null;
+  };
+
+  const getCurrentUser = async (req) => {
+    const token = getBearerToken(req);
     if (!token) return null;
     const session = await db.get(
-      'SELECT user_id FROM sessions WHERE token = ?',
+      'SELECT user_id, created_at FROM sessions WHERE token = ?',
       token
     );
     if (!session) return null;
+    if (Date.now() - Date.parse(session.created_at) > sessionTtlMs) {
+      await db.run('DELETE FROM sessions WHERE token = ?', token);
+      return null;
+    }
     const userRow = await db.get(
       'SELECT * FROM users WHERE id = ?',
       session.user_id
     );
     return serializeUser(userRow);
+  };
+
+  app.use('/api', async (req, res, next) => {
+    try {
+      req.user = await getCurrentUser(req);
+      req.authToken = req.user ? getBearerToken(req) : null;
+      const route = `${req.method} ${req.baseUrl}${req.path}`;
+      if (req.user || PUBLIC_API_ROUTES.has(route)) {
+        return next();
+      }
+      return res.status(401).json({ error: '请先登录' });
+    } catch (err) {
+      return res.status(500).json({ error: String(err.message || err) });
+    }
+  });
+
+  const forbid = (res, message = '当前账号无此操作权限') =>
+    res.status(403).json({ error: message });
+  const requirePerm = (perm) => (req, res, next) =>
+    req.user.permissions[perm] ? next() : forbid(res);
+  const requireAdmin = (req, res, next) =>
+    req.user.role === 'admin'
+      ? next()
+      : forbid(res, '仅超级管理员可执行此操作');
+
+  const getVisibleTask = async (user, taskId) => {
+    const task = await db.get('SELECT * FROM tasks WHERE id = ?', taskId);
+    return task && canSeeProject(user, task.project_id) ? task : null;
+  };
+
+  const getVisibleSubtask = async (user, subId) => {
+    const sub = await db.get('SELECT * FROM subtasks WHERE id = ?', subId);
+    return sub && (await getVisibleTask(user, sub.task_id)) ? sub : null;
+  };
+
+  const getVisibleChatGroup = async (user, groupId) => {
+    const group = await db.get(
+      'SELECT * FROM chat_groups WHERE id = ?',
+      groupId
+    );
+    if (!group) return null;
+    return !group.project_id || canSeeProject(user, group.project_id)
+      ? group
+      : null;
+  };
+
+  const canManageChatGroup = (user, group) =>
+    group.created_by === user.id || user.permissions.can_manage_members;
+
+  // Activities record who actually made the change (not the assignee).
+  const insertActivity = async (
+    conn,
+    taskId,
+    user,
+    type,
+    content,
+    createdAt
+  ) => {
+    const id = crypto.randomUUID();
+    await conn.run(
+      'INSERT INTO activities (id, task_id, member_id, actor_name, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      id,
+      taskId,
+      user?.member_id || null,
+      user?.display_name || null,
+      type,
+      content,
+      createdAt
+    );
+    return id;
+  };
+
+  // In-memory brute-force guard, keyed by client IP + username.
+  const loginFailures = new Map();
+  const dummyPasswordHash = hashPassword(
+    crypto.randomBytes(16).toString('hex')
+  );
+  const isLoginBlocked = (key) => {
+    const entry = loginFailures.get(key);
+    if (!entry) return false;
+    if (Date.now() - entry.first > LOGIN_WINDOW_MS) {
+      loginFailures.delete(key);
+      return false;
+    }
+    return entry.count >= LOGIN_MAX_FAILURES;
+  };
+  const recordLoginFailure = (key) => {
+    const now = Date.now();
+    if (loginFailures.size > 10000) {
+      for (const [k, v] of loginFailures) {
+        if (now - v.first > LOGIN_WINDOW_MS) loginFailures.delete(k);
+      }
+    }
+    const entry = loginFailures.get(key);
+    if (!entry || now - entry.first > LOGIN_WINDOW_MS) {
+      loginFailures.set(key, { count: 1, first: now });
+    } else {
+      entry.count += 1;
+    }
   };
 
   // ==========================================
@@ -97,7 +246,7 @@ export function createApp(options = {}) {
     try {
       const cntRow = await db.get('SELECT COUNT(*) as cnt FROM users');
       const initialized = Number(cntRow?.cnt || 0) > 0;
-      const currentUser = await getCurrentUser(req);
+      const currentUser = req.user;
       return res.json({ initialized, currentUser, user: currentUser });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -125,7 +274,7 @@ export function createApp(options = {}) {
       if (!username || !String(username).trim()) {
         return res.status(400).json({ error: '管理员登录账号不能为空' });
       }
-      if (!password || String(password).length < 4) {
+      if (!password || String(password).length < MIN_PASSWORD_LENGTH) {
         return res.status(400).json({ error: '登录密码不能少于 4 位' });
       }
 
@@ -135,54 +284,69 @@ export function createApp(options = {}) {
           ? String(display_name).trim()
           : String(username).trim();
       const nowISO = new Date().toISOString();
+      const passwordHash = hashPassword(password);
 
-      let boundMemberId = null;
-      if (create_member || bind_member_name) {
-        const lookupName =
-          bind_member_name && String(bind_member_name).trim()
-            ? String(bind_member_name).trim()
-            : cleanDisplay;
-        const existingMem = await db.get(
-          'SELECT id FROM members WHERE LOWER(name) = LOWER(?)',
-          lookupName
-        );
-        if (existingMem) {
-          boundMemberId = existingMem.id;
-        } else if (create_member) {
-          boundMemberId = `mem-${crypto.randomUUID().slice(0, 8)}`;
-          await db.run(
-            'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
-            boundMemberId,
-            lookupName,
-            '超级管理员',
-            'from-indigo-500 to-purple-600',
-            '',
-            40
+      // Re-check inside a locked transaction so two concurrent setups cannot both win.
+      const created = await db.transaction(async (tx) => {
+        await tx.lock('flow:setup');
+        const existingUsers = await tx.get('SELECT COUNT(*) as cnt FROM users');
+        if (Number(existingUsers?.cnt || 0) > 0) return null;
+
+        let boundMemberId = null;
+        if (create_member || bind_member_name) {
+          const lookupName =
+            bind_member_name && String(bind_member_name).trim()
+              ? String(bind_member_name).trim()
+              : cleanDisplay;
+          const existingMem = await tx.get(
+            'SELECT id FROM members WHERE LOWER(name) = LOWER(?)',
+            lookupName
           );
+          if (existingMem) {
+            boundMemberId = existingMem.id;
+          } else if (create_member) {
+            boundMemberId = `mem-${crypto.randomUUID().slice(0, 8)}`;
+            await tx.run(
+              'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
+              boundMemberId,
+              lookupName,
+              '超级管理员',
+              'from-indigo-500 to-purple-600',
+              '',
+              40
+            );
+          }
         }
+
+        const newUserId = `usr-${crypto.randomUUID().slice(0, 8)}`;
+        const perms = normalizePermissions('admin', {});
+        await tx.run(
+          'INSERT INTO users (id, username, display_name, password_hash, role, member_id, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          newUserId,
+          cleanUsername,
+          cleanDisplay,
+          passwordHash,
+          'admin',
+          boundMemberId,
+          JSON.stringify(perms),
+          nowISO
+        );
+
+        const newToken = crypto.randomBytes(32).toString('hex');
+        await tx.run(
+          'INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)',
+          newToken,
+          newUserId,
+          nowISO
+        );
+        return { userId: newUserId, token: newToken };
+      });
+      if (!created) {
+        return res
+          .status(400)
+          .json({ error: '系统已完成初始化设置，请直接登录' });
       }
-
-      const userId = `usr-${crypto.randomUUID().slice(0, 8)}`;
-      const perms = normalizePermissions('admin', {});
-      await db.run(
-        'INSERT INTO users (id, username, display_name, password_hash, role, member_id, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        userId,
-        cleanUsername,
-        cleanDisplay,
-        hashPassword(password),
-        'admin',
-        boundMemberId,
-        JSON.stringify(perms),
-        nowISO
-      );
-
-      const token = crypto.randomBytes(32).toString('hex');
-      await db.run(
-        'INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)',
-        token,
-        userId,
-        nowISO
-      );
+      const { userId, token } = created;
 
       const userRow = await db.get(
         'SELECT * FROM users WHERE id = ?',
@@ -204,13 +368,26 @@ export function createApp(options = {}) {
         return res.status(400).json({ error: '请输入账号和密码' });
       }
       const cleanUsername = String(username).trim().toLowerCase();
+      const limiterKey = `${req.ip}|${cleanUsername}`;
+      if (isLoginBlocked(limiterKey)) {
+        return res
+          .status(429)
+          .json({ error: '登录失败次数过多，请 15 分钟后再试' });
+      }
       const userRow = await db.get(
         'SELECT * FROM users WHERE LOWER(username) = ?',
         cleanUsername
       );
-      if (!userRow || !verifyPassword(password, userRow.password_hash)) {
+      // Hash even for unknown usernames so response time does not reveal them.
+      const passwordOk = verifyPassword(
+        password,
+        userRow ? userRow.password_hash : dummyPasswordHash
+      );
+      if (!userRow || !passwordOk) {
+        recordLoginFailure(limiterKey);
         return res.status(401).json({ error: '账号或密码错误' });
       }
+      loginFailures.delete(limiterKey);
 
       const token = crypto.randomBytes(32).toString('hex');
       const nowISO = new Date().toISOString();
@@ -232,9 +409,8 @@ export function createApp(options = {}) {
 
   app.post('/api/auth/logout', async (req, res) => {
     try {
-      const authHeader = req.headers.authorization || '';
-      if (authHeader.startsWith('Bearer ')) {
-        const token = authHeader.slice(7).trim();
+      const token = getBearerToken(req);
+      if (token) {
         await db.run('DELETE FROM sessions WHERE token = ?', token);
       }
       return res.json({ ok: true });
@@ -244,7 +420,7 @@ export function createApp(options = {}) {
   });
 
   // List all user accounts
-  app.get('/api/users', async (_req, res) => {
+  app.get('/api/users', requirePerm('can_manage_accounts'), async (_req, res) => {
     try {
       const rows = await db.all(
         'SELECT * FROM users ORDER BY created_at ASC'
@@ -256,7 +432,7 @@ export function createApp(options = {}) {
   });
 
   // Create user account (Admin)
-  app.post('/api/users', async (req, res) => {
+  app.post('/api/users', requirePerm('can_manage_accounts'), async (req, res) => {
     try {
       const {
         username,
@@ -271,8 +447,26 @@ export function createApp(options = {}) {
       if (!username || !String(username).trim()) {
         return res.status(400).json({ error: '登录账号不能为空' });
       }
-      if (!password || String(password).length < 4) {
+      if (!password || String(password).length < MIN_PASSWORD_LENGTH) {
         return res.status(400).json({ error: '密码长度不能少于 4 位' });
+      }
+      if (!ACCOUNT_ROLES.includes(role)) {
+        return res.status(400).json({ error: '无效的账号角色' });
+      }
+      const normalizedPerms = normalizePermissions(role, permissions);
+      if (req.user.role !== 'admin') {
+        if (role === 'admin') {
+          return forbid(res, '仅超级管理员可创建管理员账号');
+        }
+        if (normalizedPerms.can_manage_accounts) {
+          return forbid(res, '仅超级管理员可授予账号管理权限');
+        }
+      }
+      if (
+        member_id &&
+        !(await db.get('SELECT id FROM members WHERE id = ?', member_id))
+      ) {
+        return res.status(400).json({ error: '绑定的人员不存在' });
       }
 
       const cleanUsername = String(username).trim().toLowerCase();
@@ -313,7 +507,6 @@ export function createApp(options = {}) {
 
       const userId = `usr-${crypto.randomUUID().slice(0, 8)}`;
       const nowISO = new Date().toISOString();
-      const normalizedPerms = normalizePermissions(role, permissions);
 
       await db.run(
         'INSERT INTO users (id, username, display_name, password_hash, role, member_id, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -338,7 +531,7 @@ export function createApp(options = {}) {
   });
 
   // Update user account (Admin)
-  app.patch('/api/users/:id', async (req, res) => {
+  app.patch('/api/users/:id', requirePerm('can_manage_accounts'), async (req, res) => {
     try {
       const userId = req.params.id;
       const existing = await db.get(
@@ -348,26 +541,70 @@ export function createApp(options = {}) {
       if (!existing) {
         return res.status(404).json({ error: '未找到该账号' });
       }
+      const actorIsAdmin = req.user.role === 'admin';
+      const isSelf = existing.id === req.user.id;
+      if (existing.role === 'admin' && !actorIsAdmin) {
+        return forbid(res, '仅超级管理员可修改管理员账号');
+      }
 
       const updates = req.body || {};
       const nextUsername =
         updates.username !== undefined
           ? String(updates.username).trim().toLowerCase()
           : existing.username;
+      if (!nextUsername) {
+        return res.status(400).json({ error: '登录账号不能为空' });
+      }
+      if (nextUsername !== existing.username) {
+        const dup = await db.get(
+          'SELECT id FROM users WHERE LOWER(username) = ? AND id <> ?',
+          nextUsername,
+          userId
+        );
+        if (dup) {
+          return res.status(400).json({ error: '该登录账号已存在' });
+        }
+      }
       const nextDisplay =
         updates.display_name !== undefined
           ? String(updates.display_name).trim()
           : existing.display_name;
       const nextRole =
         updates.role !== undefined ? updates.role : existing.role;
+      if (!ACCOUNT_ROLES.includes(nextRole)) {
+        return res.status(400).json({ error: '无效的账号角色' });
+      }
+      if (nextRole === 'admin' && !actorIsAdmin) {
+        return forbid(res, '仅超级管理员可授予管理员角色');
+      }
+      if (isSelf && nextRole !== existing.role) {
+        return forbid(res, '不能修改自己的角色');
+      }
       const nextMemberId =
         updates.member_id !== undefined
           ? updates.member_id || null
           : existing.member_id;
-      const nextPasswordHash =
-        updates.password && String(updates.password).trim().length >= 4
-          ? hashPassword(String(updates.password).trim())
-          : existing.password_hash;
+      if (
+        nextMemberId &&
+        nextMemberId !== existing.member_id &&
+        !(await db.get('SELECT id FROM members WHERE id = ?', nextMemberId))
+      ) {
+        return res.status(400).json({ error: '绑定的人员不存在' });
+      }
+
+      // An empty or missing password keeps the current one; never trim it,
+      // so it matches exactly what the user types at login.
+      let nextPasswordHash = existing.password_hash;
+      const passwordChanged =
+        updates.password !== undefined &&
+        updates.password !== null &&
+        updates.password !== '';
+      if (passwordChanged) {
+        if (String(updates.password).length < MIN_PASSWORD_LENGTH) {
+          return res.status(400).json({ error: '密码长度不能少于 4 位' });
+        }
+        nextPasswordHash = hashPassword(String(updates.password));
+      }
 
       let existingPerms = {};
       try {
@@ -375,10 +612,19 @@ export function createApp(options = {}) {
       } catch {
         existingPerms = {};
       }
+      const currentPerms = normalizePermissions(existing.role, existingPerms);
       const nextPerms = normalizePermissions(
         nextRole,
         updates.permissions !== undefined ? updates.permissions : existingPerms
       );
+      if (!actorIsAdmin) {
+        if (nextPerms.can_manage_accounts && !currentPerms.can_manage_accounts) {
+          return forbid(res, '仅超级管理员可授予账号管理权限');
+        }
+        if (isSelf && JSON.stringify(nextPerms) !== JSON.stringify(currentPerms)) {
+          return forbid(res, '不能修改自己的权限');
+        }
+      }
 
       // Ensure at least one admin remains if downgrading role
       if (existing.role === 'admin' && nextRole !== 'admin') {
@@ -402,6 +648,14 @@ export function createApp(options = {}) {
         JSON.stringify(nextPerms),
         userId
       );
+      if (passwordChanged) {
+        // Sign the account out everywhere except the session making this change.
+        await db.run(
+          'DELETE FROM sessions WHERE user_id = ? AND token <> ?',
+          userId,
+          req.authToken || ''
+        );
+      }
 
       const updatedRow = await db.get(
         'SELECT * FROM users WHERE id = ?',
@@ -414,7 +668,7 @@ export function createApp(options = {}) {
   });
 
   // Delete user account (Admin)
-  app.delete('/api/users/:id', async (req, res) => {
+  app.delete('/api/users/:id', requirePerm('can_manage_accounts'), async (req, res) => {
     try {
       const userId = req.params.id;
       const existing = await db.get(
@@ -423,6 +677,9 @@ export function createApp(options = {}) {
       );
       if (!existing) {
         return res.status(404).json({ error: '未找到该账号' });
+      }
+      if (existing.role === 'admin' && req.user.role !== 'admin') {
+        return forbid(res, '仅超级管理员可删除管理员账号');
       }
       if (existing.role === 'admin') {
         const adminCnt = await db.get(
@@ -446,19 +703,18 @@ export function createApp(options = {}) {
   // ==========================================
   app.get('/api/bootstrap', async (req, res) => {
     try {
-      const user = await getCurrentUser(req);
-      const visibleProjectIds = user
-        ? user.permissions.visible_project_ids
-        : 'all';
-      const payload = await getBootstrapData(db, visibleProjectIds);
-      res.json({ ...payload, currentUser: user });
+      const payload = await getBootstrapData(
+        db,
+        req.user.permissions.visible_project_ids
+      );
+      res.json({ ...payload, currentUser: req.user });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
     }
   });
 
   // 2. Create a new task
-  app.post('/api/tasks', async (req, res) => {
+  app.post('/api/tasks', requirePerm('can_create_task'), async (req, res) => {
     try {
       const {
         title,
@@ -482,14 +738,21 @@ export function createApp(options = {}) {
       let project = resolvedProjectId
         ? await db.get('SELECT * FROM projects WHERE id = ?', resolvedProjectId)
         : null;
+      if (project && !canSeeProject(req.user, project.id)) {
+        return res.status(404).json({ error: '未找到该项目' });
+      }
 
       if (!project) {
-        const firstProj = await db.get(
-          'SELECT * FROM projects ORDER BY created_at ASC LIMIT 1'
-        );
+        const firstProj = (
+          await db.all('SELECT * FROM projects ORDER BY created_at ASC')
+        ).find((p) => canSeeProject(req.user, p.id));
         if (firstProj) {
           project = firstProj;
           resolvedProjectId = firstProj.id;
+        } else if (!req.user.permissions.can_create_project) {
+          return res
+            .status(400)
+            .json({ error: '当前没有可用的项目，请联系管理员创建项目' });
         } else {
           const newProjId = `proj-${crypto.randomUUID().slice(0, 8)}`;
           const projName = req.body.project_name
@@ -515,6 +778,7 @@ export function createApp(options = {}) {
             newProjId
           );
           resolvedProjectId = newProjId;
+          await grantProjectVisibility(db, req.user, newProjId);
         }
       }
 
@@ -558,11 +822,10 @@ export function createApp(options = {}) {
         nowISO
       );
 
-      await db.run(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        crypto.randomUUID(),
+      await insertActivity(
+        db,
         id,
-        assignee_id || null,
+        req.user,
         'system',
         `创建了任务 [${taskKey}] ${String(title).trim()}`,
         nowISO
@@ -591,13 +854,10 @@ export function createApp(options = {}) {
   });
 
   // 3. Update task fields
-  app.patch('/api/tasks/:id', async (req, res) => {
+  app.patch('/api/tasks/:id', requirePerm('can_edit_task'), async (req, res) => {
     try {
       const taskId = req.params.id;
-      const existing = await db.get(
-        'SELECT * FROM tasks WHERE id = ?',
-        taskId
-      );
+      const existing = await getVisibleTask(req.user, taskId);
       if (!existing) {
         return res.status(404).json({ error: '未找到该任务' });
       }
@@ -657,7 +917,10 @@ export function createApp(options = {}) {
           'SELECT name FROM projects WHERE id = ?',
           nextProjectId
         );
-        changes.push(`迁移至项目「${proj?.name || nextProjectId}」`);
+        if (!proj || !canSeeProject(req.user, nextProjectId)) {
+          return res.status(404).json({ error: '未找到目标项目' });
+        }
+        changes.push(`迁移至项目「${proj.name}」`);
       }
       if (nextAssigneeId !== existing.assignee_id) {
         const mem = nextAssigneeId
@@ -716,11 +979,10 @@ export function createApp(options = {}) {
       );
 
       if (changes.length > 0) {
-        await db.run(
-          'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          crypto.randomUUID(),
+        await insertActivity(
+          db,
           taskId,
-          nextAssigneeId,
+          req.user,
           'system',
           changes.join('；'),
           nowISO
@@ -735,8 +997,11 @@ export function createApp(options = {}) {
   });
 
   // 4. Delete task
-  app.delete('/api/tasks/:id', async (req, res) => {
+  app.delete('/api/tasks/:id', requirePerm('can_delete_task'), async (req, res) => {
     try {
+      if (!(await getVisibleTask(req.user, req.params.id))) {
+        return res.status(404).json({ error: '未找到该任务' });
+      }
       await db.run('DELETE FROM tasks WHERE id = ?', req.params.id);
       res.json({ ok: true });
     } catch (err) {
@@ -745,9 +1010,12 @@ export function createApp(options = {}) {
   });
 
   // 5. Subtasks endpoints (with automatic completed_at timestamp!)
-  app.post('/api/tasks/:id/subtasks', async (req, res) => {
+  app.post('/api/tasks/:id/subtasks', requirePerm('can_edit_task'), async (req, res) => {
     try {
       const taskId = req.params.id;
+      if (!(await getVisibleTask(req.user, taskId))) {
+        return res.status(404).json({ error: '未找到该任务' });
+      }
       const { title } = req.body || {};
       if (!title || !String(title).trim()) {
         return res.status(400).json({ error: '子任务标题不能为空' });
@@ -775,13 +1043,10 @@ export function createApp(options = {}) {
     }
   });
 
-  app.patch('/api/subtasks/:subId', async (req, res) => {
+  app.patch('/api/subtasks/:subId', requirePerm('can_edit_task'), async (req, res) => {
     try {
       const subId = req.params.subId;
-      const existing = await db.get(
-        'SELECT * FROM subtasks WHERE id = ?',
-        subId
-      );
+      const existing = await getVisibleSubtask(req.user, subId);
       if (!existing) {
         return res.status(404).json({ error: '子任务不存在' });
       }
@@ -822,8 +1087,11 @@ export function createApp(options = {}) {
     }
   });
 
-  app.delete('/api/subtasks/:subId', async (req, res) => {
+  app.delete('/api/subtasks/:subId', requirePerm('can_edit_task'), async (req, res) => {
     try {
+      if (!(await getVisibleSubtask(req.user, req.params.subId))) {
+        return res.status(404).json({ error: '子任务不存在' });
+      }
       await db.run('DELETE FROM subtasks WHERE id = ?', req.params.subId);
       res.json({ ok: true });
     } catch (err) {
@@ -835,37 +1103,34 @@ export function createApp(options = {}) {
   app.post('/api/tasks/:id/comments', async (req, res) => {
     try {
       const taskId = req.params.id;
-      const { member_id = null, content } = req.body || {};
+      // The author is always the signed-in user; any member_id in the body is ignored.
+      const { content } = req.body || {};
       if (!content || !String(content).trim()) {
         return res.status(400).json({ error: '评论内容不能为空' });
       }
-      const id = crypto.randomUUID();
-      const nowISO = new Date().toISOString();
-      await db.run(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-        id,
+      if (!(await getVisibleTask(req.user, taskId))) {
+        return res.status(404).json({ error: '未找到该任务' });
+      }
+      const commentId = await insertActivity(
+        db,
         taskId,
-        member_id,
+        req.user,
         'comment',
         String(content).trim(),
-        nowISO
+        new Date().toISOString()
       );
-
-      return res.status(201).json({
-        id,
-        task_id: taskId,
-        member_id,
-        type: 'comment',
-        content: String(content).trim(),
-        created_at: nowISO,
-      });
+      const comment = await db.get(
+        'SELECT * FROM activities WHERE id = ?',
+        commentId
+      );
+      return res.status(201).json(comment);
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
   });
 
   // 7. Create, update, or delete project
-  app.post('/api/projects', async (req, res) => {
+  app.post('/api/projects', requirePerm('can_create_project'), async (req, res) => {
     try {
       const { name, code, color = '#6366f1', description = '' } = req.body || {};
       if (!name || !String(name).trim()) {
@@ -886,6 +1151,7 @@ export function createApp(options = {}) {
         description,
         nowISO
       );
+      await grantProjectVisibility(db, req.user, id);
 
       return res.status(201).json({
         id,
@@ -900,14 +1166,14 @@ export function createApp(options = {}) {
     }
   });
 
-  app.patch('/api/projects/:id', async (req, res) => {
+  app.patch('/api/projects/:id', requirePerm('can_edit_project'), async (req, res) => {
     try {
       const projId = req.params.id;
       const existing = await db.get(
         'SELECT * FROM projects WHERE id = ?',
         projId
       );
-      if (!existing) {
+      if (!existing || !canSeeProject(req.user, projId)) {
         return res.status(404).json({ error: '未找到该项目' });
       }
       const nextName =
@@ -960,9 +1226,12 @@ export function createApp(options = {}) {
     }
   });
 
-  app.delete('/api/projects/:id', async (req, res) => {
+  app.delete('/api/projects/:id', requirePerm('can_delete_project'), async (req, res) => {
     try {
       const projId = req.params.id;
+      if (!canSeeProject(req.user, projId)) {
+        return res.status(404).json({ error: '未找到该项目' });
+      }
       await db.run(
         'UPDATE chat_groups SET project_id = NULL WHERE project_id = ?',
         projId
@@ -975,7 +1244,7 @@ export function createApp(options = {}) {
   });
 
   // 8. Create, update, or delete team member
-  app.post('/api/members', async (req, res) => {
+  app.post('/api/members', requirePerm('can_manage_members'), async (req, res) => {
     try {
       const {
         name,
@@ -1011,7 +1280,7 @@ export function createApp(options = {}) {
     }
   });
 
-  app.patch('/api/members/:id', async (req, res) => {
+  app.patch('/api/members/:id', requirePerm('can_manage_members'), async (req, res) => {
     try {
       const memId = req.params.id;
       const existing = await db.get(
@@ -1076,7 +1345,7 @@ export function createApp(options = {}) {
     }
   });
 
-  app.delete('/api/members/:id', async (req, res) => {
+  app.delete('/api/members/:id', requirePerm('can_manage_members'), async (req, res) => {
     try {
       const memId = req.params.id;
       // Safely clear assignee_id on tasks assigned to this member
@@ -1116,11 +1385,9 @@ export function createApp(options = {}) {
   // ==========================================
   app.get('/api/chat-groups', async (req, res) => {
     try {
-      const user = await getCurrentUser(req);
-      const visibleProjectIds = user
-        ? user.permissions.visible_project_ids
-        : 'all';
-      return res.json({ groups: await getChatGroups(db, visibleProjectIds) });
+      return res.json({
+        groups: await getChatGroups(db, req.user.permissions.visible_project_ids),
+      });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
@@ -1137,7 +1404,14 @@ export function createApp(options = {}) {
       if (!name || !String(name).trim()) {
         return res.status(400).json({ error: '群聊名称不能为空' });
       }
-      const user = await getCurrentUser(req);
+      const user = req.user;
+      if (
+        project_id &&
+        (!canSeeProject(user, project_id) ||
+          !(await db.get('SELECT id FROM projects WHERE id = ?', project_id)))
+      ) {
+        return res.status(404).json({ error: '未找到该项目' });
+      }
       const id = `grp-${crypto.randomUUID().slice(0, 8)}`;
       const nowISO = new Date().toISOString();
 
@@ -1171,12 +1445,12 @@ export function createApp(options = {}) {
   app.patch('/api/chat-groups/:id', async (req, res) => {
     try {
       const groupId = req.params.id;
-      const existing = await db.get(
-        'SELECT * FROM chat_groups WHERE id = ?',
-        groupId
-      );
+      const existing = await getVisibleChatGroup(req.user, groupId);
       if (!existing) {
         return res.status(404).json({ error: '未找到该沟通群聊' });
+      }
+      if (!canManageChatGroup(req.user, existing)) {
+        return forbid(res, '仅群聊创建者或人员管理者可修改群聊');
       }
       const nextName =
         req.body.name !== undefined
@@ -1200,6 +1474,14 @@ export function createApp(options = {}) {
       if (!nextName) {
         return res.status(400).json({ error: '群聊名称不能为空' });
       }
+      if (
+        nextProjId &&
+        nextProjId !== existing.project_id &&
+        (!canSeeProject(req.user, nextProjId) ||
+          !(await db.get('SELECT id FROM projects WHERE id = ?', nextProjId)))
+      ) {
+        return res.status(404).json({ error: '未找到该项目' });
+      }
 
       await db.run(
         'UPDATE chat_groups SET name = ?, description = ?, project_id = ?, member_ids = ? WHERE id = ?',
@@ -1220,6 +1502,13 @@ export function createApp(options = {}) {
 
   app.delete('/api/chat-groups/:id', async (req, res) => {
     try {
+      const group = await getVisibleChatGroup(req.user, req.params.id);
+      if (!group) {
+        return res.status(404).json({ error: '未找到该沟通群聊' });
+      }
+      if (!canManageChatGroup(req.user, group)) {
+        return forbid(res, '仅群聊创建者或人员管理者可删除群聊');
+      }
       await db.run('DELETE FROM chat_groups WHERE id = ?', req.params.id);
       return res.json({ ok: true });
     } catch (err) {
@@ -1230,6 +1519,9 @@ export function createApp(options = {}) {
   app.get('/api/chat-groups/:id/messages', async (req, res) => {
     try {
       const groupId = req.params.id;
+      if (!(await getVisibleChatGroup(req.user, groupId))) {
+        return res.status(404).json({ error: '未找到该沟通群聊' });
+      }
       const messages = await db.all(
         'SELECT * FROM chat_group_messages WHERE group_id = ? ORDER BY created_at ASC',
         groupId
@@ -1243,39 +1535,26 @@ export function createApp(options = {}) {
   app.post('/api/chat-groups/:id/messages', async (req, res) => {
     try {
       const groupId = req.params.id;
-      const group = await db.get(
-        'SELECT * FROM chat_groups WHERE id = ?',
-        groupId
-      );
+      const group = await getVisibleChatGroup(req.user, groupId);
       if (!group) {
         return res.status(404).json({ error: '未找到该沟通群聊' });
       }
 
-      const { content, sender_member_id = null, sender_name = '' } =
-        req.body || {};
+      // The sender is always the signed-in user; sender fields in the body are ignored.
+      const { content } = req.body || {};
       if (!content || !String(content).trim()) {
         return res.status(400).json({ error: '消息内容不能为空' });
       }
 
-      const user = await getCurrentUser(req);
-      const effectiveMemberId =
-        sender_member_id || (user ? user.member_id : null);
-      const member = effectiveMemberId
-        ? await db.get(
-          'SELECT * FROM members WHERE id = ?',
-          effectiveMemberId
-        )
+      const user = req.user;
+      const member = user.member_id
+        ? await db.get('SELECT * FROM members WHERE id = ?', user.member_id)
         : null;
+      const effectiveMemberId = member ? member.id : null;
 
-      const resolvedName =
-        (member && member.name) ||
-        (user && user.display_name) ||
-        (sender_name && String(sender_name).trim()) ||
-        '团队成员';
+      const resolvedName = (member && member.name) || user.display_name;
       const resolvedRole =
-        (member && member.role) ||
-        (user && ROLE_LABELS[user.role]) ||
-        '项目成员';
+        (member && member.role) || ROLE_LABELS[user.role] || '项目成员';
       const resolvedAvatarBg =
         (member && member.avatar_bg) || 'from-indigo-500 to-purple-600';
 
@@ -1286,7 +1565,7 @@ export function createApp(options = {}) {
         'INSERT INTO chat_group_messages (id, group_id, sender_user_id, sender_member_id, sender_name, sender_role, avatar_bg, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         msgId,
         groupId,
-        user ? user.id : null,
+        user.id,
         effectiveMemberId,
         resolvedName,
         resolvedRole,
@@ -1307,6 +1586,23 @@ export function createApp(options = {}) {
 
   app.delete('/api/chat-groups/:groupId/messages/:msgId', async (req, res) => {
     try {
+      if (!(await getVisibleChatGroup(req.user, req.params.groupId))) {
+        return res.status(404).json({ error: '未找到该沟通群聊' });
+      }
+      const message = await db.get(
+        'SELECT sender_user_id FROM chat_group_messages WHERE id = ? AND group_id = ?',
+        req.params.msgId,
+        req.params.groupId
+      );
+      if (!message) {
+        return res.status(404).json({ error: '消息不存在' });
+      }
+      if (
+        message.sender_user_id !== req.user.id &&
+        !req.user.permissions.can_manage_members
+      ) {
+        return forbid(res, '只能删除自己发送的消息');
+      }
       await db.run(
         'DELETE FROM chat_group_messages WHERE id = ? AND group_id = ?',
         req.params.msgId,
@@ -1319,7 +1615,7 @@ export function createApp(options = {}) {
   });
 
   // 9. Clear workspace data
-  app.post('/api/seed/reset', async (_req, res) => {
+  app.post('/api/seed/reset', requireAdmin, async (_req, res) => {
     try {
       await clearWorkspaceData(db);
       const payload = await getBootstrapData(db);
@@ -1330,7 +1626,7 @@ export function createApp(options = {}) {
   });
 
   // 10. Import JSON backup
-  app.post('/api/import', async (req, res) => {
+  app.post('/api/import', requireAdmin, async (req, res) => {
     try {
       const { projects, members, tasks } = req.body || {};
       if (
@@ -1428,28 +1724,36 @@ export function createApp(options = {}) {
   // 11. AI Assistant Settings (Permanent SQLite persistence)
   app.get('/api/ai/settings', async (_req, res) => {
     try {
-      res.json(await getAiSettings(db));
+      res.json(toPublicAiSettings(await getAiSettings(db)));
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.put('/api/ai/settings', async (req, res) => {
+  app.put('/api/ai/settings', requireAdmin, async (req, res) => {
     try {
       const updated = await updateAiSettings(db, req.body || {});
-      res.json(updated);
+      res.json(toPublicAiSettings(updated));
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
     }
   });
 
   // 12. AI Assistant Fetch Models / Test Connection
-  app.post('/api/ai/models', async (req, res) => {
+  app.post('/api/ai/models', requireAdmin, async (req, res) => {
     try {
       const saved = await getAiSettings(db);
       const baseUrl = req.body?.base_url || saved.base_url;
-      const apiKey =
-        req.body?.api_key !== undefined ? req.body.api_key : saved.api_key;
+      // Only reuse the stored key for the endpoint it was saved for, so it is
+      // never sent to a different host.
+      const sameEndpoint =
+        normalizeOpenAIEndpoint(baseUrl, 'models') ===
+        normalizeOpenAIEndpoint(saved.base_url, 'models');
+      const apiKey = req.body?.api_key
+        ? req.body.api_key
+        : sameEndpoint
+          ? saved.api_key
+          : '';
       const models = await fetchOpenAIModels(baseUrl, apiKey);
       res.json({ models });
     } catch (err) {
@@ -1458,17 +1762,17 @@ export function createApp(options = {}) {
   });
 
   // 13. AI Assistant Chat History & Clear
-  app.get('/api/ai/messages', async (_req, res) => {
+  app.get('/api/ai/messages', async (req, res) => {
     try {
-      res.json({ messages: await getAiMessages(db) });
+      res.json({ messages: await getAiMessages(db, req.user) });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.delete('/api/ai/messages', async (_req, res) => {
+  app.delete('/api/ai/messages', async (req, res) => {
     try {
-      const messages = await clearAiMessages(db);
+      const messages = await clearAiMessages(db, req.user);
       res.json({ messages });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -1482,13 +1786,12 @@ export function createApp(options = {}) {
       if (!message || !String(message).trim()) {
         return res.status(400).json({ error: '请输入指令或对话内容' });
       }
-      const assistantMessage = await processAiChat(db, message);
-      const user = await getCurrentUser(req);
-      const visibleProjectIds = user
-        ? user.permissions.visible_project_ids
-        : 'all';
-      const bootstrap = await getBootstrapData(db, visibleProjectIds);
-      const messages = await getAiMessages(db);
+      const assistantMessage = await processAiChat(db, message, req.user);
+      const bootstrap = await getBootstrapData(
+        db,
+        req.user.permissions.visible_project_ids
+      );
+      const messages = await getAiMessages(db, req.user);
       return res.json({
         assistantMessage,
         messages,

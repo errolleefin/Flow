@@ -43,6 +43,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     ...options,
     headers,
   });
+  if (res.status === 401 && token) {
+    // Session expired or revoked: drop it and let the app return to sign-in.
+    setAuthToken(null);
+    window.dispatchEvent(new Event('flow:unauthorized'));
+  }
   if (!res.ok) {
     let errMsg = `请求失败 (${res.status})`;
     try {
@@ -163,10 +168,10 @@ export const apiClient = {
       method: 'DELETE',
     }),
 
-  addComment: (taskId: string, member_id: string | null, content: string) =>
+  addComment: (taskId: string, content: string) =>
     request<Activity>(`/api/tasks/${taskId}/comments`, {
       method: 'POST',
-      body: JSON.stringify({ member_id, content }),
+      body: JSON.stringify({ content }),
     }),
 
   // Projects
@@ -273,14 +278,7 @@ export const apiClient = {
       `/api/chat-groups/${groupId}/messages`
     ),
 
-  sendChatGroupMessage: (
-    groupId: string,
-    payload: {
-      content: string;
-      sender_member_id?: string | null;
-      sender_name?: string;
-    }
-  ) =>
+  sendChatGroupMessage: (groupId: string, payload: { content: string }) =>
     request<ChatGroupMessage>(`/api/chat-groups/${groupId}/messages`, {
       method: 'POST',
       body: JSON.stringify(payload),

@@ -71,6 +71,7 @@ export interface Activity {
   id: string;
   task_id: string;
   member_id: string | null;
+  actor_name?: string | null;
   type: 'comment' | 'system';
   content: string;
   created_at: string;
@@ -147,6 +148,8 @@ export interface AiSettings {
   id?: number;
   base_url: string;
   api_key: string;
+  has_api_key?: boolean;
+  api_key_masked?: string;
   model: string;
   temperature: number;
   updated_at?: string;

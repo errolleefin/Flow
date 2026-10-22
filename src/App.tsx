@@ -330,12 +330,7 @@ export const App: React.FC = () => {
     };
   }, [loadBootstrap]);
 
-  const handleLogout = async () => {
-    try {
-      await apiClient.logout();
-    } catch {
-      setAuthToken(null);
-    }
+  const resetSessionState = useCallback(() => {
     setCurrentUser(null);
     setSelectedTaskId(null);
     setAccountModalOpen(false);
@@ -343,6 +338,24 @@ export const App: React.FC = () => {
     setChatNotifications([]);
     seenInitializedRef.current = false;
     lastSeenMsgByGroupRef.current = {};
+  }, []);
+
+  // The API client fires this when the server rejects the stored session.
+  useEffect(() => {
+    window.addEventListener('flow:unauthorized', resetSessionState);
+    return () =>
+      window.removeEventListener('flow:unauthorized', resetSessionState);
+  }, [resetSessionState]);
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout();
+    } catch {
+      // the local session is cleared regardless
+    } finally {
+      setAuthToken(null);
+    }
+    resetSessionState();
   };
 
   // Global Keyboard Shortcuts: Ctrl/Cmd+K, N, Esc
@@ -548,13 +561,9 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleAddComment = async (
-    taskId: string,
-    memberId: string | null,
-    content: string
-  ) => {
+  const handleAddComment = async (taskId: string, content: string) => {
     try {
-      const comment = await apiClient.addComment(taskId, memberId, content);
+      const comment = await apiClient.addComment(taskId, content);
       setTasks((prev) =>
         prev.map((t) =>
           t.id === taskId
@@ -1173,7 +1182,6 @@ export const App: React.FC = () => {
         task={selectedTask}
         projects={projects}
         members={members}
-        currentUserMemberId={currentUser.member_id}
         canEditTask={currentUser.permissions.can_edit_task}
         canDeleteTask={currentUser.permissions.can_delete_task}
         onClose={() => setSelectedTaskId(null)}
@@ -1227,6 +1235,7 @@ export const App: React.FC = () => {
       {/* AI Assistant Drawer (OpenAI Compatible + Permanent SQLite Config + Auto DB Ingestion) */}
       <AIAssistantDrawer
         isOpen={aiDrawerOpen}
+        isAdmin={currentUser.role === 'admin'}
         onClose={() => setAiDrawerOpen(false)}
         onSyncBootstrap={(data) => {
           setProjects(data.projects);
