@@ -597,9 +597,9 @@ export async function executeAiActions(db, actions, user) {
 
       const taskKey = await nextTaskKey(db, proj.code);
       const maxPosRow = await db.get(
-        'SELECT MAX(position) as maxPos FROM tasks'
+        'SELECT MAX(position) as max_pos FROM tasks'
       );
-      const position = (Number(maxPosRow?.maxPos) || 0) + 1;
+      const position = (Number(maxPosRow?.max_pos) || 0) + 1;
       const taskId = `task-${crypto.randomUUID().slice(0, 8)}`;
 
       const status = TASK_STATUSES.includes(act.status) ? act.status : 'todo';
@@ -865,7 +865,8 @@ export async function executeAiActions(db, actions, user) {
       if (existing) {
         const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
         const nextRole = act.role ? String(act.role).trim() : existing.role;
-        const nextCap = act.capacity_hours ? Number(act.capacity_hours) : existing.capacity_hours;
+        const nextCap =
+          Math.round(Number(act.capacity_hours)) || existing.capacity_hours;
         await db.run(
           'UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?',
           nextName,

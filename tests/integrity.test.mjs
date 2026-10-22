@@ -142,3 +142,20 @@ test('deleting a member unbinds accounts and chat groups (REST and AI share the 
   const groups = (await api('GET', '/api/chat-groups', { token: adminToken })).data.groups;
   assert.deepEqual(groups.find((g) => g.id === group.id).member_ids, []);
 });
+
+test('concurrent task creation still yields unique keys', async (t) => {
+  const { api } = await startTestApp(t);
+  const { token } = await setupAdmin(api);
+  const project = (await api('POST', '/api/projects', {
+    token,
+    body: { name: 'Burst', code: 'BST', color: '#6366f1' },
+  })).data;
+  const results = await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      api('POST', '/api/tasks', { token, body: { title: `T${i}`, project_id: project.id } })
+    )
+  );
+  assert.ok(results.every((r) => r.status === 201));
+  const keys = results.map((r) => r.data.task_key);
+  assert.equal(new Set(keys).size, 20, `duplicate keys: ${keys.sort()}`);
+});

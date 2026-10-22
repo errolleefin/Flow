@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { openStorage } from './storage.mjs';
+import { PG_SCHEMA_SQL } from './pgSchema.mjs';
 
 export const DEFAULT_ROLE_PERMISSIONS = {
   admin: {
@@ -188,9 +189,22 @@ export function serializeUser(row) {
 
 export async function openDatabase({ dbPath, databaseUrl } = {}) {
   const db = await openStorage({ dbPath, databaseUrl });
-  await initSqliteSchema(db);
+  if (db.dialect === 'postgres') {
+    await initPostgresSchema(db);
+  } else {
+    await initSqliteSchema(db);
+  }
   await seedDefaults(db);
   return db;
+}
+
+// Several serverless instances may start at once; the advisory lock makes them
+// apply the (idempotent) schema one after another.
+async function initPostgresSchema(db) {
+  await db.transaction(async (tx) => {
+    await tx.lock('flow:schema');
+    await tx.exec(PG_SCHEMA_SQL);
+  });
 }
 
 async function initSqliteSchema(db) {
@@ -521,8 +535,11 @@ export async function getBootstrapData(db, visibleProjectIds = 'all') {
 
   const allowedProjSet = new Set(projects.map((p) => p.id));
 
+  // Insertion order: SQLite's rowid, Postgres' created_at column.
+  const memberOrder =
+    db.dialect === 'postgres' ? 'created_at ASC, id ASC' : 'rowid ASC';
   const members = (
-    await db.all('SELECT * FROM members ORDER BY pinned DESC, rowid ASC')
+    await db.all(`SELECT * FROM members ORDER BY pinned DESC, ${memberOrder}`)
   ).map((m) => ({
     ...m,
     pinned: Boolean(m.pinned),

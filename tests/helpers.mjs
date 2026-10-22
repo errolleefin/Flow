@@ -1,14 +1,42 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import pg from 'pg';
 import { createApp } from '../server/app.mjs';
 
-// Starts the API on a throwaway SQLite database that is removed after the test.
+// Set FLOW_TEST_DATABASE_URL (a Postgres server URL with CREATE DATABASE
+// rights) to run the suite against Postgres instead of SQLite.
+const PG_ADMIN_URL = process.env.FLOW_TEST_DATABASE_URL;
+
+async function withPgAdmin(fn) {
+  const client = new pg.Client({ connectionString: PG_ADMIN_URL });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
+// Starts the API on a throwaway database (a SQLite file, or a fresh Postgres
+// database) that is removed after the test.
 export async function startTestApp(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-test-'));
-  const { app, ready, closeDb } = createApp({
-    dbPath: path.join(dir, 'flow.sqlite'),
-  });
+  let databaseUrl;
+  let dir;
+  let pgDatabase;
+  if (PG_ADMIN_URL) {
+    pgDatabase = `flow_test_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    await withPgAdmin((client) => client.query(`CREATE DATABASE ${pgDatabase}`));
+    const url = new URL(PG_ADMIN_URL);
+    url.pathname = `/${pgDatabase}`;
+    databaseUrl = url.toString();
+  } else {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-test-'));
+  }
+  const { app, ready, closeDb } = createApp(
+    databaseUrl ? { databaseUrl } : { dbPath: path.join(dir, 'flow.sqlite') }
+  );
   await ready;
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
@@ -17,7 +45,13 @@ export async function startTestApp(t) {
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));
     await closeDb();
-    fs.rmSync(dir, { recursive: true, force: true });
+    if (pgDatabase) {
+      await withPgAdmin((client) =>
+        client.query(`DROP DATABASE IF EXISTS ${pgDatabase} WITH (FORCE)`)
+      );
+    } else {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   const api = async (method, url, { body, token } = {}) => {
@@ -39,7 +73,7 @@ export async function startTestApp(t) {
     return { status: res.status, data };
   };
 
-  return { baseUrl, api };
+  return { baseUrl, api, databaseUrl };
 }
 
 export async function setupAdmin(api, overrides = {}) {

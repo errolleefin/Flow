@@ -196,7 +196,9 @@ export function createApp(options = {}) {
     db = opened;
     return opened;
   });
-  ready.catch(() => {});
+  ready.catch((err) => {
+    console.error('[flow] database initialization failed:', err);
+  });
   const sessionTtlMs =
     (Number(process.env.FLOW_SESSION_TTL_DAYS) || 30) * 24 * 60 * 60 * 1000;
   const app = express();
@@ -214,10 +216,11 @@ export function createApp(options = {}) {
     try {
       await ready;
       next();
-    } catch (err) {
+    } catch {
+      // Details (which may include hostnames) stay in the server log.
       res
         .status(503)
-        .json({ error: `数据库初始化失败：${String(err.message || err)}` });
+        .json({ error: '数据库初始化失败，请检查服务器日志与数据库配置' });
     }
   });
 
@@ -904,9 +907,9 @@ export function createApp(options = {}) {
 
         const taskKey = await nextTaskKey(tx, project.code);
         const maxPosRow = await tx.get(
-          'SELECT MAX(position) as maxPos FROM tasks'
+          'SELECT MAX(position) as max_pos FROM tasks'
         );
-        const position = (Number(maxPosRow?.maxPos) || 0) + 1;
+        const position = (Number(maxPosRow?.max_pos) || 0) + 1;
 
         await tx.run(
           `INSERT INTO tasks (
@@ -1026,11 +1029,11 @@ export function createApp(options = {}) {
           : existing.estimate_hours;
       const nextLogged =
         updates.logged_minutes !== undefined
-          ? Number(updates.logged_minutes)
+          ? Math.round(Number(updates.logged_minutes))
           : existing.logged_minutes;
       const nextPosition =
         updates.position !== undefined
-          ? Number(updates.position)
+          ? Math.round(Number(updates.position))
           : existing.position;
 
       if (nextStatus !== existing.status) {
@@ -1390,7 +1393,7 @@ export function createApp(options = {}) {
         role,
         avatar_bg,
         email,
-        Number(capacity_hours) || 40
+        Math.round(Number(capacity_hours)) || 40
       );
 
       return res.status(201).json({
@@ -1399,7 +1402,7 @@ export function createApp(options = {}) {
         role,
         avatar_bg,
         email,
-        capacity_hours: Number(capacity_hours) || 40,
+        capacity_hours: Math.round(Number(capacity_hours)) || 40,
       });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -1434,7 +1437,7 @@ export function createApp(options = {}) {
           : existing.email;
       const nextCapacity =
         req.body.capacity_hours !== undefined
-          ? Number(req.body.capacity_hours) || 40
+          ? Math.round(Number(req.body.capacity_hours)) || 40
           : existing.capacity_hours;
       const nextPinned =
         req.body.pinned !== undefined
@@ -1765,7 +1768,7 @@ export function createApp(options = {}) {
             m.role || '团队成员',
             m.avatar_bg || 'from-indigo-500 to-purple-600',
             m.email || '',
-            Number(m.capacity_hours) || 40,
+            Math.round(Number(m.capacity_hours)) || 40,
             m.pinned ? 1 : 0
           );
         }
@@ -1791,8 +1794,8 @@ export function createApp(options = {}) {
             ),
             JSON.stringify(t.tags || []),
             Number(t.estimate_hours) || 4,
-            Number(t.logged_minutes) || 0,
-            Number(t.position) || 0,
+            Math.round(Number(t.logged_minutes)) || 0,
+            Math.round(Number(t.position)) || 0,
             t.created_at || nowISO,
             t.updated_at || nowISO
           );
