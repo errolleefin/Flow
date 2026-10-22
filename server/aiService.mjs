@@ -22,6 +22,10 @@ const AVATAR_PALETTE = [
   'from-fuchsia-500 to-violet-600',
 ];
 
+function escapeLike(value) {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 export function normalizeOpenAIEndpoint(baseUrl, type = 'chat') {
   const raw = String(baseUrl || 'https://api.openai.com/v1')
     .trim()
@@ -43,12 +47,12 @@ export function normalizeOpenAIEndpoint(baseUrl, type = 'chat') {
   return raw;
 }
 
-export function getAiSettings(db) {
-  return db.prepare('SELECT * FROM ai_settings WHERE id = 1').get();
+export async function getAiSettings(db) {
+  return db.get('SELECT * FROM ai_settings WHERE id = 1');
 }
 
-export function updateAiSettings(db, patch) {
-  const current = getAiSettings(db);
+export async function updateAiSettings(db, patch) {
+  const current = await getAiSettings(db);
   const nextBaseUrl =
     patch.base_url !== undefined
       ? String(patch.base_url).trim()
@@ -63,25 +67,30 @@ export function updateAiSettings(db, patch) {
       : current.temperature;
   const nowISO = new Date().toISOString();
 
-  db.prepare(
-    'UPDATE ai_settings SET base_url = ?, api_key = ?, model = ?, temperature = ?, updated_at = ? WHERE id = 1'
-  ).run(nextBaseUrl, nextApiKey, nextModel, nextTemp, nowISO);
+  await db.run(
+    'UPDATE ai_settings SET base_url = ?, api_key = ?, model = ?, temperature = ?, updated_at = ? WHERE id = 1',
+    nextBaseUrl,
+    nextApiKey,
+    nextModel,
+    nextTemp,
+    nowISO
+  );
 
   return getAiSettings(db);
 }
 
-export function getAiMessages(db) {
-  const rows = db
-    .prepare('SELECT * FROM ai_messages ORDER BY created_at ASC')
-    .all();
+export async function getAiMessages(db) {
+  const rows = await db.all(
+    'SELECT * FROM ai_messages ORDER BY created_at ASC'
+  );
   return rows.map((r) => ({
     ...r,
     operations: JSON.parse(r.operations || '[]'),
   }));
 }
 
-export function clearAiMessages(db) {
-  db.exec('DELETE FROM ai_messages;');
+export async function clearAiMessages(db) {
+  await db.exec('DELETE FROM ai_messages;');
   const nowISO = new Date().toISOString();
   const welcome = {
     id: crypto.randomUUID(),
@@ -91,29 +100,32 @@ export function clearAiMessages(db) {
     operations: [],
     created_at: nowISO,
   };
-  db.prepare(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(welcome.id, welcome.role, welcome.content, '[]', welcome.created_at);
+  await db.run(
+    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)',
+    welcome.id,
+    welcome.role,
+    welcome.content,
+    '[]',
+    welcome.created_at
+  );
   return [welcome];
 }
 
-export function buildSystemPrompt(db) {
+export async function buildSystemPrompt(db) {
   const today = getTodayISO();
   const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   const [y, m, d] = today.split('-').map(Number);
   const weekdayLabel = weekDays[new Date(y, m - 1, d).getDay()];
 
-  const projects = db
-    .prepare('SELECT id, name, code, description FROM projects')
-    .all();
-  const members = db
-    .prepare('SELECT id, name, role, capacity_hours FROM members')
-    .all();
-  const tasks = db
-    .prepare(
-      'SELECT id, task_key, title, project_id, status, priority, due_date, assignee_id FROM tasks ORDER BY created_at DESC LIMIT 40'
-    )
-    .all();
+  const projects = await db.all(
+    'SELECT id, name, code, description FROM projects'
+  );
+  const members = await db.all(
+    'SELECT id, name, role, capacity_hours FROM members'
+  );
+  const tasks = await db.all(
+    'SELECT id, task_key, title, project_id, status, priority, due_date, assignee_id FROM tasks ORDER BY created_at DESC LIMIT 40'
+  );
 
   const projMap = new Map(projects.map((p) => [p.id, p.name]));
   const memMap = new Map(members.map((mem) => [mem.id, mem.name]));
@@ -286,8 +298,8 @@ export function parseAiJsonResponse(rawContent) {
   };
 }
 
-function findOrCreateProjectByName(db, projectName, operations) {
-  const allProjects = db.prepare('SELECT * FROM projects').all();
+async function findOrCreateProjectByName(db, projectName, operations) {
+  const allProjects = await db.all('SELECT * FROM projects');
   if (!projectName || !String(projectName).trim()) {
     return allProjects[0];
   }
@@ -316,11 +328,17 @@ function findOrCreateProjectByName(db, projectName, operations) {
   const color = PROJECT_PALETTE[allProjects.length % PROJECT_PALETTE.length];
   const nowISO = new Date().toISOString();
 
-  db.prepare(
-    'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, clean, code, color, `由 AI 助理自动创建的项目「${clean}」`, nowISO);
+  await db.run(
+    'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    id,
+    clean,
+    code,
+    color,
+    `由 AI 助理自动创建的项目「${clean}」`,
+    nowISO
+  );
 
-  const created = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  const created = await db.get('SELECT * FROM projects WHERE id = ?', id);
   operations.push({
     kind: 'project_created',
     id: created.id,
@@ -330,10 +348,10 @@ function findOrCreateProjectByName(db, projectName, operations) {
   return created;
 }
 
-function findOrCreateMemberByName(db, memberName, roleHint, operations) {
+async function findOrCreateMemberByName(db, memberName, roleHint, operations) {
   if (!memberName || !String(memberName).trim()) return null;
   const clean = String(memberName).trim();
-  const allMembers = db.prepare('SELECT * FROM members').all();
+  const allMembers = await db.all('SELECT * FROM members');
   const found = allMembers.find(
     (m) =>
       m.name.toLowerCase() === clean.toLowerCase() ||
@@ -345,11 +363,17 @@ function findOrCreateMemberByName(db, memberName, roleHint, operations) {
   const avatarBg = AVATAR_PALETTE[allMembers.length % AVATAR_PALETTE.length];
   const role = roleHint || '项目协作成员';
 
-  db.prepare(
-    'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, clean, role, avatarBg, '', 40);
+  await db.run(
+    'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
+    id,
+    clean,
+    role,
+    avatarBg,
+    '',
+    40
+  );
 
-  const created = db.prepare('SELECT * FROM members WHERE id = ?').get(id);
+  const created = await db.get('SELECT * FROM members WHERE id = ?', id);
   operations.push({
     kind: 'member_created',
     id: created.id,
@@ -359,7 +383,7 @@ function findOrCreateMemberByName(db, memberName, roleHint, operations) {
   return created;
 }
 
-export function executeAiActions(db, actions) {
+export async function executeAiActions(db, actions) {
   const operations = [];
   if (!Array.isArray(actions)) return operations;
 
@@ -369,19 +393,21 @@ export function executeAiActions(db, actions) {
     const nowISO = new Date().toISOString();
 
     if (type === 'create_project' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (!existing) {
-        const count = db.prepare('SELECT COUNT(*) as cnt FROM projects').get().cnt;
+        const count = Number(
+          (await db.get('SELECT COUNT(*) as cnt FROM projects')).cnt
+        );
         const id = `proj-${crypto.randomUUID().slice(0, 8)}`;
         const code =
           (act.code && String(act.code).trim().toUpperCase()) ||
           String(act.name).trim().slice(0, 3).toUpperCase();
         const color = act.color || PROJECT_PALETTE[count % PROJECT_PALETTE.length];
-        db.prepare(
-          'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(
+        await db.run(
+          'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           id,
           String(act.name).trim(),
           code,
@@ -397,34 +423,38 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'create_member' && act.name) {
-      findOrCreateMemberByName(db, act.name, act.role, operations);
+      await findOrCreateMemberByName(db, act.name, act.role, operations);
     } else if (type === 'create_task' && act.title) {
-      const proj = findOrCreateProjectByName(
+      const proj = await findOrCreateProjectByName(
         db,
         act.project_name || act.project,
         operations
       );
       const assignee = act.assignee_name
-        ? findOrCreateMemberByName(db, act.assignee_name, null, operations)
+        ? await findOrCreateMemberByName(db, act.assignee_name, null, operations)
         : null;
 
       const collabIds = [];
       if (Array.isArray(act.collaborator_names)) {
         for (const cName of act.collaborator_names) {
-          const mem = findOrCreateMemberByName(db, cName, null, operations);
+          const mem = await findOrCreateMemberByName(db, cName, null, operations);
           if (mem && !collabIds.includes(mem.id)) {
             collabIds.push(mem.id);
           }
         }
       }
 
-      const existingCount = db
-        .prepare('SELECT COUNT(*) as cnt FROM tasks WHERE project_id = ?')
-        .get(proj.id);
-      const nextNum = 101 + (existingCount?.cnt || 0) + operations.length;
+      const existingCount = await db.get(
+        'SELECT COUNT(*) as cnt FROM tasks WHERE project_id = ?',
+        proj.id
+      );
+      const nextNum =
+        101 + (Number(existingCount?.cnt) || 0) + operations.length;
       const taskKey = `${proj.code}-${nextNum}`;
-      const maxPosRow = db.prepare('SELECT MAX(position) as maxPos FROM tasks').get();
-      const position = (maxPosRow?.maxPos || 0) + 1;
+      const maxPosRow = await db.get(
+        'SELECT MAX(position) as maxPos FROM tasks'
+      );
+      const position = (Number(maxPosRow?.maxPos) || 0) + 1;
       const taskId = `task-${crypto.randomUUID().slice(0, 8)}`;
 
       const status = ['backlog', 'todo', 'in_progress', 'review', 'done'].includes(
@@ -442,13 +472,12 @@ export function executeAiActions(db, actions) {
       const tags = Array.isArray(act.tags) ? act.tags.map(String) : ['AI录入'];
       const estimateHours = Number(act.estimate_hours) || 4;
 
-      db.prepare(`
-        INSERT INTO tasks (
+      await db.run(
+        `INSERT INTO tasks (
           id, task_key, title, description, project_id, status, priority,
           due_date, assignee_id, collaborator_ids, tags, estimate_hours,
           logged_minutes, position, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-      `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
         taskId,
         taskKey,
         String(act.title).trim(),
@@ -466,9 +495,8 @@ export function executeAiActions(db, actions) {
         nowISO
       );
 
-      db.prepare(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         crypto.randomUUID(),
         taskId,
         assignee ? assignee.id : null,
@@ -479,12 +507,15 @@ export function executeAiActions(db, actions) {
 
       let subCount = 0;
       if (Array.isArray(act.subtasks)) {
-        const insSub = db.prepare(
-          'INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?, ?, ?, 0, ?)'
-        );
         for (const subTitle of act.subtasks) {
           if (subTitle && String(subTitle).trim()) {
-            insSub.run(crypto.randomUUID(), taskId, String(subTitle).trim(), nowISO);
+            await db.run(
+              'INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?, ?, ?, FALSE, ?)',
+              crypto.randomUUID(),
+              taskId,
+              String(subTitle).trim(),
+              nowISO
+            );
             subCount++;
           }
         }
@@ -504,14 +535,16 @@ export function executeAiActions(db, actions) {
     } else if (type === 'update_task') {
       let existing = null;
       if (act.task_key) {
-        existing = db
-          .prepare('SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)')
-          .get(String(act.task_key).trim());
+        existing = await db.get(
+          'SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)',
+          String(act.task_key).trim()
+        );
       }
       if (!existing && act.title) {
-        existing = db
-          .prepare('SELECT * FROM tasks WHERE title LIKE ?')
-          .get(`%${String(act.title).trim()}%`);
+        existing = await db.get(
+          "SELECT * FROM tasks WHERE LOWER(title) LIKE ? ESCAPE '\\'",
+          `%${escapeLike(String(act.title).trim().toLowerCase())}%`
+        );
       }
       if (existing) {
         const nextTitle = act.new_title || existing.title;
@@ -520,24 +553,24 @@ export function executeAiActions(db, actions) {
         const nextDueDate =
           act.due_date !== undefined ? act.due_date : existing.due_date;
         const nextProject = act.project_name
-          ? findOrCreateProjectByName(db, act.project_name, operations)
+          ? await findOrCreateProjectByName(db, act.project_name, operations)
           : null;
         const nextAssignee = act.assignee_name
-          ? findOrCreateMemberByName(db, act.assignee_name, null, operations)
+          ? await findOrCreateMemberByName(db, act.assignee_name, null, operations)
           : null;
 
         let nextCollabJson = existing.collaborator_ids;
         if (Array.isArray(act.collaborator_names)) {
           const ids = [];
           for (const cn of act.collaborator_names) {
-            const m = findOrCreateMemberByName(db, cn, null, operations);
+            const m = await findOrCreateMemberByName(db, cn, null, operations);
             if (m) ids.push(m.id);
           }
           nextCollabJson = JSON.stringify(ids);
         }
 
-        db.prepare(`
-          UPDATE tasks SET
+        await db.run(
+          `UPDATE tasks SET
             title = ?,
             status = ?,
             priority = ?,
@@ -546,8 +579,7 @@ export function executeAiActions(db, actions) {
             assignee_id = ?,
             collaborator_ids = ?,
             updated_at = ?
-          WHERE id = ?
-        `).run(
+          WHERE id = ?`,
           nextTitle,
           nextStatus,
           nextPriority,
@@ -559,9 +591,8 @@ export function executeAiActions(db, actions) {
           existing.id
         );
 
-        db.prepare(
-          'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(
+        await db.run(
+          'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           crypto.randomUUID(),
           existing.id,
           existing.assignee_id,
@@ -570,7 +601,7 @@ export function executeAiActions(db, actions) {
           nowISO
         );
 
-        const updatedFull = getFullTaskById(db, existing.id);
+        const updatedFull = await getFullTaskById(db, existing.id);
         operations.push({
           kind: 'task_updated',
           id: existing.id,
@@ -581,11 +612,12 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'delete_task' && act.task_key) {
-      const existing = db
-        .prepare('SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)')
-        .get(String(act.task_key).trim());
+      const existing = await db.get(
+        'SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)',
+        String(act.task_key).trim()
+      );
       if (existing) {
-        db.prepare('DELETE FROM tasks WHERE id = ?').run(existing.id);
+        await db.run('DELETE FROM tasks WHERE id = ?', existing.id);
         operations.push({
           kind: 'task_deleted',
           id: existing.id,
@@ -595,14 +627,16 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'update_project' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (existing) {
         const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
         const nextCode = act.code ? String(act.code).trim().toUpperCase() : existing.code;
         const nextDesc = act.description !== undefined ? String(act.description) : existing.description;
-        db.prepare('UPDATE projects SET name = ?, code = ?, description = ? WHERE id = ?').run(
+        await db.run(
+          'UPDATE projects SET name = ?, code = ?, description = ? WHERE id = ?',
           nextName,
           nextCode,
           nextDesc,
@@ -616,11 +650,12 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'delete_project' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (existing) {
-        db.prepare('DELETE FROM projects WHERE id = ?').run(existing.id);
+        await db.run('DELETE FROM projects WHERE id = ?', existing.id);
         operations.push({
           kind: 'task_deleted',
           id: existing.id,
@@ -629,14 +664,16 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'update_member' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM members WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM members WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (existing) {
         const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
         const nextRole = act.role ? String(act.role).trim() : existing.role;
         const nextCap = act.capacity_hours ? Number(act.capacity_hours) : existing.capacity_hours;
-        db.prepare('UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?').run(
+        await db.run(
+          'UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?',
           nextName,
           nextRole,
           nextCap,
@@ -650,20 +687,27 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'delete_member' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM members WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM members WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (existing) {
-        db.prepare('UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?').run(existing.id);
-        const allTasks = db.prepare('SELECT id, collaborator_ids FROM tasks').all();
-        const upd = db.prepare('UPDATE tasks SET collaborator_ids = ? WHERE id = ?');
+        await db.run(
+          'UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?',
+          existing.id
+        );
+        const allTasks = await db.all('SELECT id, collaborator_ids FROM tasks');
         for (const t of allTasks) {
           const list = JSON.parse(t.collaborator_ids || '[]');
           if (Array.isArray(list) && list.includes(existing.id)) {
-            upd.run(JSON.stringify(list.filter((id) => id !== existing.id)), t.id);
+            await db.run(
+              'UPDATE tasks SET collaborator_ids = ? WHERE id = ?',
+              JSON.stringify(list.filter((id) => id !== existing.id)),
+              t.id
+            );
           }
         }
-        db.prepare('DELETE FROM members WHERE id = ?').run(existing.id);
+        await db.run('DELETE FROM members WHERE id = ?', existing.id);
         operations.push({
           kind: 'task_deleted',
           id: existing.id,
@@ -678,23 +722,27 @@ export function executeAiActions(db, actions) {
 }
 
 export async function processAiChat(db, userMessage) {
-  const settings = getAiSettings(db);
+  const settings = await getAiSettings(db);
   if (!settings.base_url || !settings.model) {
     throw new Error('请先在 AI 助理配置中填写 Base URL 与模型名称 (Model)');
   }
 
   const nowISO = new Date().toISOString();
   const userMsgId = crypto.randomUUID();
-  db.prepare(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(userMsgId, 'user', String(userMessage).trim(), '[]', nowISO);
+  await db.run(
+    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)',
+    userMsgId,
+    'user',
+    String(userMessage).trim(),
+    '[]',
+    nowISO
+  );
 
-  const recentMessages = db
-    .prepare(
+  const recentMessages = (
+    await db.all(
       'SELECT role, content FROM ai_messages ORDER BY created_at DESC LIMIT 8'
     )
-    .all()
-    .reverse();
+  ).reverse();
 
   const endpoint = normalizeOpenAIEndpoint(settings.base_url, 'chat');
   const headers = {
@@ -705,7 +753,7 @@ export async function processAiChat(db, userMessage) {
   }
 
   const apiMessages = [
-    { role: 'system', content: buildSystemPrompt(db) },
+    { role: 'system', content: await buildSystemPrompt(db) },
     ...recentMessages.map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
@@ -732,7 +780,9 @@ export async function processAiChat(db, userMessage) {
   const data = await response.json();
   const rawContent = data?.choices?.[0]?.message?.content || '';
   const parsed = parseAiJsonResponse(rawContent);
-  const operations = executeAiActions(db, parsed.actions);
+  const operations = await db.transaction((tx) =>
+    executeAiActions(tx, parsed.actions)
+  );
 
   const assistantMsg = {
     id: crypto.randomUUID(),
@@ -742,9 +792,8 @@ export async function processAiChat(db, userMessage) {
     created_at: new Date().toISOString(),
   };
 
-  db.prepare(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(
+  await db.run(
+    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)',
     assistantMsg.id,
     assistantMsg.role,
     assistantMsg.content,

@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import fs from 'node:fs';
 import {
-  initDatabase,
+  openDatabase,
   clearWorkspaceData,
   getBootstrapData,
   getFullTaskById,
@@ -46,36 +46,58 @@ const ROLE_LABELS = {
   member: '成员',
 };
 
-export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
-  const db = initDatabase(dbPath);
+export function createApp(options = {}) {
+  const {
+    dbPath = path.resolve('data/flow.sqlite'),
+    databaseUrl = undefined,
+  } = typeof options === 'string' ? { dbPath: options } : options;
+  // Assigned once the storage backend is ready; every /api route awaits it first.
+  let db = null;
+  const ready = openDatabase({ dbPath, databaseUrl }).then((opened) => {
+    db = opened;
+    return opened;
+  });
+  ready.catch(() => {});
   const app = express();
 
   app.use(cors());
   app.use(express.json({ limit: '5mb' }));
+  app.use('/api', async (_req, res, next) => {
+    try {
+      await ready;
+      next();
+    } catch (err) {
+      res
+        .status(503)
+        .json({ error: `数据库初始化失败：${String(err.message || err)}` });
+    }
+  });
 
-  const getCurrentUser = (req) => {
+  const getCurrentUser = async (req) => {
     const authHeader = req.headers.authorization || '';
     if (!authHeader.startsWith('Bearer ')) return null;
     const token = authHeader.slice(7).trim();
     if (!token) return null;
-    const session = db
-      .prepare('SELECT user_id FROM sessions WHERE token = ?')
-      .get(token);
+    const session = await db.get(
+      'SELECT user_id FROM sessions WHERE token = ?',
+      token
+    );
     if (!session) return null;
-    const userRow = db
-      .prepare('SELECT * FROM users WHERE id = ?')
-      .get(session.user_id);
+    const userRow = await db.get(
+      'SELECT * FROM users WHERE id = ?',
+      session.user_id
+    );
     return serializeUser(userRow);
   };
 
   // ==========================================
   // 0. Authentication & Account Management API
   // ==========================================
-  app.get('/api/auth/status', (req, res) => {
+  app.get('/api/auth/status', async (req, res) => {
     try {
-      const cntRow = db.prepare('SELECT COUNT(*) as cnt FROM users').get();
+      const cntRow = await db.get('SELECT COUNT(*) as cnt FROM users');
       const initialized = Number(cntRow?.cnt || 0) > 0;
-      const currentUser = getCurrentUser(req);
+      const currentUser = await getCurrentUser(req);
       return res.json({ initialized, currentUser, user: currentUser });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -83,9 +105,9 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // First-time deployment Super Admin setup
-  app.post('/api/auth/setup', (req, res) => {
+  app.post('/api/auth/setup', async (req, res) => {
     try {
-      const cntRow = db.prepare('SELECT COUNT(*) as cnt FROM users').get();
+      const cntRow = await db.get('SELECT COUNT(*) as cnt FROM users');
       if (Number(cntRow?.cnt || 0) > 0) {
         return res
           .status(400)
@@ -120,16 +142,16 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
           bind_member_name && String(bind_member_name).trim()
             ? String(bind_member_name).trim()
             : cleanDisplay;
-        const existingMem = db
-          .prepare('SELECT id FROM members WHERE LOWER(name) = LOWER(?)')
-          .get(lookupName);
+        const existingMem = await db.get(
+          'SELECT id FROM members WHERE LOWER(name) = LOWER(?)',
+          lookupName
+        );
         if (existingMem) {
           boundMemberId = existingMem.id;
         } else if (create_member) {
           boundMemberId = `mem-${crypto.randomUUID().slice(0, 8)}`;
-          db.prepare(
-            'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)'
-          ).run(
+          await db.run(
+            'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
             boundMemberId,
             lookupName,
             '超级管理员',
@@ -142,9 +164,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
 
       const userId = `usr-${crypto.randomUUID().slice(0, 8)}`;
       const perms = normalizePermissions('admin', {});
-      db.prepare(
-        'INSERT INTO users (id, username, display_name, password_hash, role, member_id, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO users (id, username, display_name, password_hash, role, member_id, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         userId,
         cleanUsername,
         cleanDisplay,
@@ -156,13 +177,17 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       );
 
       const token = crypto.randomBytes(32).toString('hex');
-      db.prepare(
-        'INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)'
-      ).run(token, userId, nowISO);
+      await db.run(
+        'INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)',
+        token,
+        userId,
+        nowISO
+      );
 
-      const userRow = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(userId);
+      const userRow = await db.get(
+        'SELECT * FROM users WHERE id = ?',
+        userId
+      );
       return res.status(201).json({
         token,
         user: serializeUser(userRow),
@@ -172,25 +197,29 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.post('/api/auth/login', (req, res) => {
+  app.post('/api/auth/login', async (req, res) => {
     try {
       const { username, password } = req.body || {};
       if (!username || !password) {
         return res.status(400).json({ error: '请输入账号和密码' });
       }
       const cleanUsername = String(username).trim().toLowerCase();
-      const userRow = db
-        .prepare('SELECT * FROM users WHERE LOWER(username) = ?')
-        .get(cleanUsername);
+      const userRow = await db.get(
+        'SELECT * FROM users WHERE LOWER(username) = ?',
+        cleanUsername
+      );
       if (!userRow || !verifyPassword(password, userRow.password_hash)) {
         return res.status(401).json({ error: '账号或密码错误' });
       }
 
       const token = crypto.randomBytes(32).toString('hex');
       const nowISO = new Date().toISOString();
-      db.prepare(
-        'INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)'
-      ).run(token, userRow.id, nowISO);
+      await db.run(
+        'INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)',
+        token,
+        userRow.id,
+        nowISO
+      );
 
       return res.json({
         token,
@@ -201,12 +230,12 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.post('/api/auth/logout', (req, res) => {
+  app.post('/api/auth/logout', async (req, res) => {
     try {
       const authHeader = req.headers.authorization || '';
       if (authHeader.startsWith('Bearer ')) {
         const token = authHeader.slice(7).trim();
-        db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+        await db.run('DELETE FROM sessions WHERE token = ?', token);
       }
       return res.json({ ok: true });
     } catch (err) {
@@ -215,11 +244,11 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // List all user accounts
-  app.get('/api/users', (_req, res) => {
+  app.get('/api/users', async (_req, res) => {
     try {
-      const rows = db
-        .prepare('SELECT * FROM users ORDER BY created_at ASC')
-        .all();
+      const rows = await db.all(
+        'SELECT * FROM users ORDER BY created_at ASC'
+      );
       return res.json({ users: rows.map(serializeUser) });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -227,7 +256,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // Create user account (Admin)
-  app.post('/api/users', (req, res) => {
+  app.post('/api/users', async (req, res) => {
     try {
       const {
         username,
@@ -247,9 +276,10 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       }
 
       const cleanUsername = String(username).trim().toLowerCase();
-      const dup = db
-        .prepare('SELECT id FROM users WHERE LOWER(username) = ?')
-        .get(cleanUsername);
+      const dup = await db.get(
+        'SELECT id FROM users WHERE LOWER(username) = ?',
+        cleanUsername
+      );
       if (dup) {
         return res.status(400).json({ error: '该登录账号已存在' });
       }
@@ -261,16 +291,16 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
 
       let resolvedMemberId = member_id || null;
       if (!resolvedMemberId && auto_create_member) {
-        const existingMem = db
-          .prepare('SELECT id FROM members WHERE LOWER(name) = LOWER(?)')
-          .get(cleanDisplay);
+        const existingMem = await db.get(
+          'SELECT id FROM members WHERE LOWER(name) = LOWER(?)',
+          cleanDisplay
+        );
         if (existingMem) {
           resolvedMemberId = existingMem.id;
         } else {
           resolvedMemberId = `mem-${crypto.randomUUID().slice(0, 8)}`;
-          db.prepare(
-            'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)'
-          ).run(
+          await db.run(
+            'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
             resolvedMemberId,
             cleanDisplay,
             ROLE_LABELS[role] || '团队成员',
@@ -285,9 +315,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       const nowISO = new Date().toISOString();
       const normalizedPerms = normalizePermissions(role, permissions);
 
-      db.prepare(
-        'INSERT INTO users (id, username, display_name, password_hash, role, member_id, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO users (id, username, display_name, password_hash, role, member_id, permissions, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         userId,
         cleanUsername,
         cleanDisplay,
@@ -298,9 +327,10 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         nowISO
       );
 
-      const createdRow = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(userId);
+      const createdRow = await db.get(
+        'SELECT * FROM users WHERE id = ?',
+        userId
+      );
       return res.status(201).json(serializeUser(createdRow));
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -308,12 +338,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // Update user account (Admin)
-  app.patch('/api/users/:id', (req, res) => {
+  app.patch('/api/users/:id', async (req, res) => {
     try {
       const userId = req.params.id;
-      const existing = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(userId);
+      const existing = await db.get(
+        'SELECT * FROM users WHERE id = ?',
+        userId
+      );
       if (!existing) {
         return res.status(404).json({ error: '未找到该账号' });
       }
@@ -351,9 +382,9 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
 
       // Ensure at least one admin remains if downgrading role
       if (existing.role === 'admin' && nextRole !== 'admin') {
-        const adminCnt = db
-          .prepare("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'")
-          .get();
+        const adminCnt = await db.get(
+          "SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'"
+        );
         if (Number(adminCnt?.cnt || 0) <= 1) {
           return res
             .status(400)
@@ -361,9 +392,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         }
       }
 
-      db.prepare(
-        'UPDATE users SET username = ?, display_name = ?, password_hash = ?, role = ?, member_id = ?, permissions = ? WHERE id = ?'
-      ).run(
+      await db.run(
+        'UPDATE users SET username = ?, display_name = ?, password_hash = ?, role = ?, member_id = ?, permissions = ? WHERE id = ?',
         nextUsername,
         nextDisplay || nextUsername,
         nextPasswordHash,
@@ -373,9 +403,10 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         userId
       );
 
-      const updatedRow = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(userId);
+      const updatedRow = await db.get(
+        'SELECT * FROM users WHERE id = ?',
+        userId
+      );
       return res.json(serializeUser(updatedRow));
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -383,26 +414,27 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // Delete user account (Admin)
-  app.delete('/api/users/:id', (req, res) => {
+  app.delete('/api/users/:id', async (req, res) => {
     try {
       const userId = req.params.id;
-      const existing = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(userId);
+      const existing = await db.get(
+        'SELECT * FROM users WHERE id = ?',
+        userId
+      );
       if (!existing) {
         return res.status(404).json({ error: '未找到该账号' });
       }
       if (existing.role === 'admin') {
-        const adminCnt = db
-          .prepare("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'")
-          .get();
+        const adminCnt = await db.get(
+          "SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'"
+        );
         if (Number(adminCnt?.cnt || 0) <= 1) {
           return res
             .status(400)
             .json({ error: '不能删除系统唯一的超级管理员账号' });
         }
       }
-      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+      await db.run('DELETE FROM users WHERE id = ?', userId);
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -412,13 +444,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   // ==========================================
   // 1. Bootstrap all state (filtered by user project visibility)
   // ==========================================
-  app.get('/api/bootstrap', (req, res) => {
+  app.get('/api/bootstrap', async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       const visibleProjectIds = user
         ? user.permissions.visible_project_ids
         : 'all';
-      const payload = getBootstrapData(db, visibleProjectIds);
+      const payload = await getBootstrapData(db, visibleProjectIds);
       res.json({ ...payload, currentUser: user });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -426,7 +458,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 2. Create a new task
-  app.post('/api/tasks', (req, res) => {
+  app.post('/api/tasks', async (req, res) => {
     try {
       const {
         title,
@@ -448,13 +480,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
 
       let resolvedProjectId = project_id;
       let project = resolvedProjectId
-        ? db.prepare('SELECT * FROM projects WHERE id = ?').get(resolvedProjectId)
+        ? await db.get('SELECT * FROM projects WHERE id = ?', resolvedProjectId)
         : null;
 
       if (!project) {
-        const firstProj = db
-          .prepare('SELECT * FROM projects ORDER BY created_at ASC LIMIT 1')
-          .get();
+        const firstProj = await db.get(
+          'SELECT * FROM projects ORDER BY created_at ASC LIMIT 1'
+        );
         if (firstProj) {
           project = firstProj;
           resolvedProjectId = firstProj.id;
@@ -469,9 +501,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
               .slice(0, 3)
               .toUpperCase() || 'FLW';
           const now = new Date().toISOString();
-          db.prepare(
-            'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-          ).run(
+          await db.run(
+            'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
             newProjId,
             projName,
             projCode,
@@ -479,35 +510,36 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
             '自动创建的初始工作项目',
             now
           );
-          project = db
-            .prepare('SELECT * FROM projects WHERE id = ?')
-            .get(newProjId);
+          project = await db.get(
+            'SELECT * FROM projects WHERE id = ?',
+            newProjId
+          );
           resolvedProjectId = newProjId;
         }
       }
 
       const codePrefix = project ? project.code : 'FLW';
-      const existingCount = db
-        .prepare('SELECT COUNT(*) as cnt FROM tasks WHERE project_id = ?')
-        .get(resolvedProjectId);
+      const existingCount = await db.get(
+        'SELECT COUNT(*) as cnt FROM tasks WHERE project_id = ?',
+        resolvedProjectId
+      );
       const nextNum = 101 + (existingCount?.cnt || 0);
       const taskKey = `${codePrefix}-${nextNum}`;
 
-      const maxPosRow = db
-        .prepare('SELECT MAX(position) as maxPos FROM tasks')
-        .get();
+      const maxPosRow = await db.get(
+        'SELECT MAX(position) as maxPos FROM tasks'
+      );
       const position = (maxPosRow?.maxPos || 0) + 1;
 
       const id = `task-${crypto.randomUUID().slice(0, 8)}`;
       const nowISO = new Date().toISOString();
 
-      db.prepare(`
-        INSERT INTO tasks (
+      await db.run(
+        `INSERT INTO tasks (
           id, task_key, title, description, project_id, status, priority,
           due_date, assignee_id, collaborator_ids, tags, estimate_hours,
           logged_minutes, position, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         taskKey,
         String(title).trim(),
@@ -526,9 +558,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         nowISO
       );
 
-      db.prepare(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         crypto.randomUUID(),
         id,
         assignee_id || null,
@@ -538,17 +569,21 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       );
 
       if (Array.isArray(subtasks) && subtasks.length > 0) {
-        const insertSub = db.prepare(
-          'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)'
-        );
         for (const subTitle of subtasks) {
           if (typeof subTitle === 'string' && subTitle.trim()) {
-            insertSub.run(crypto.randomUUID(), id, subTitle.trim(), 0, nowISO);
+            await db.run(
+              'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)',
+              crypto.randomUUID(),
+              id,
+              subTitle.trim(),
+              0,
+              nowISO
+            );
           }
         }
       }
 
-      const fullTask = getFullTaskById(db, id);
+      const fullTask = await getFullTaskById(db, id);
       return res.status(201).json(fullTask);
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -556,12 +591,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 3. Update task fields
-  app.patch('/api/tasks/:id', (req, res) => {
+  app.patch('/api/tasks/:id', async (req, res) => {
     try {
       const taskId = req.params.id;
-      const existing = db
-        .prepare('SELECT * FROM tasks WHERE id = ?')
-        .get(taskId);
+      const existing = await db.get(
+        'SELECT * FROM tasks WHERE id = ?',
+        taskId
+      );
       if (!existing) {
         return res.status(404).json({ error: '未找到该任务' });
       }
@@ -617,16 +653,18 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         changes.push(`状态变更为「${STATUS_LABELS[nextStatus] || nextStatus}」`);
       }
       if (nextProjectId !== existing.project_id) {
-        const proj = db
-          .prepare('SELECT name FROM projects WHERE id = ?')
-          .get(nextProjectId);
+        const proj = await db.get(
+          'SELECT name FROM projects WHERE id = ?',
+          nextProjectId
+        );
         changes.push(`迁移至项目「${proj?.name || nextProjectId}」`);
       }
       if (nextAssigneeId !== existing.assignee_id) {
         const mem = nextAssigneeId
-          ? db
-              .prepare('SELECT name FROM members WHERE id = ?')
-              .get(nextAssigneeId)
+          ? await db.get(
+              'SELECT name FROM members WHERE id = ?',
+              nextAssigneeId
+            )
           : null;
         changes.push(`负责人调整为「${mem?.name || '未指派'}」`);
       }
@@ -645,8 +683,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         }
       }
 
-      db.prepare(`
-        UPDATE tasks SET
+      await db.run(
+        `UPDATE tasks SET
           title = ?,
           description = ?,
           project_id = ?,
@@ -660,8 +698,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
           logged_minutes = ?,
           position = ?,
           updated_at = ?
-        WHERE id = ?
-      `).run(
+        WHERE id = ?`,
         nextTitle,
         nextDesc,
         nextProjectId,
@@ -679,9 +716,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       );
 
       if (changes.length > 0) {
-        db.prepare(
-          'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(
+        await db.run(
+          'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           crypto.randomUUID(),
           taskId,
           nextAssigneeId,
@@ -691,7 +727,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         );
       }
 
-      const fullTask = getFullTaskById(db, taskId);
+      const fullTask = await getFullTaskById(db, taskId);
       return res.json(fullTask);
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -699,9 +735,9 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 4. Delete task
-  app.delete('/api/tasks/:id', (req, res) => {
+  app.delete('/api/tasks/:id', async (req, res) => {
     try {
-      db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
+      await db.run('DELETE FROM tasks WHERE id = ?', req.params.id);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -709,7 +745,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 5. Subtasks endpoints (with automatic completed_at timestamp!)
-  app.post('/api/tasks/:id/subtasks', (req, res) => {
+  app.post('/api/tasks/:id/subtasks', async (req, res) => {
     try {
       const taskId = req.params.id;
       const { title } = req.body || {};
@@ -718,9 +754,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       }
       const id = crypto.randomUUID();
       const nowISO = new Date().toISOString();
-      db.prepare(
-        'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, 0, NULL, ?)'
-      ).run(id, taskId, String(title).trim(), nowISO);
+      await db.run(
+        'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, FALSE, NULL, ?)',
+        id,
+        taskId,
+        String(title).trim(),
+        nowISO
+      );
 
       return res.status(201).json({
         id,
@@ -735,12 +775,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.patch('/api/subtasks/:subId', (req, res) => {
+  app.patch('/api/subtasks/:subId', async (req, res) => {
     try {
       const subId = req.params.subId;
-      const existing = db
-        .prepare('SELECT * FROM subtasks WHERE id = ?')
-        .get(subId);
+      const existing = await db.get(
+        'SELECT * FROM subtasks WHERE id = ?',
+        subId
+      );
       if (!existing) {
         return res.status(404).json({ error: '子任务不存在' });
       }
@@ -762,9 +803,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
           : null;
       }
 
-      db.prepare(
-        'UPDATE subtasks SET completed = ?, completed_at = ?, title = ? WHERE id = ?'
-      ).run(nextCompleted, nextCompletedAt, nextTitle, subId);
+      await db.run(
+        'UPDATE subtasks SET completed = ?, completed_at = ?, title = ? WHERE id = ?',
+        nextCompleted,
+        nextCompletedAt,
+        nextTitle,
+        subId
+      );
 
       return res.json({
         ...existing,
@@ -777,9 +822,9 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.delete('/api/subtasks/:subId', (req, res) => {
+  app.delete('/api/subtasks/:subId', async (req, res) => {
     try {
-      db.prepare('DELETE FROM subtasks WHERE id = ?').run(req.params.subId);
+      await db.run('DELETE FROM subtasks WHERE id = ?', req.params.subId);
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -787,7 +832,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 6. Add task comment
-  app.post('/api/tasks/:id/comments', (req, res) => {
+  app.post('/api/tasks/:id/comments', async (req, res) => {
     try {
       const taskId = req.params.id;
       const { member_id = null, content } = req.body || {};
@@ -796,9 +841,15 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       }
       const id = crypto.randomUUID();
       const nowISO = new Date().toISOString();
-      db.prepare(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(id, taskId, member_id, 'comment', String(content).trim(), nowISO);
+      await db.run(
+        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        id,
+        taskId,
+        member_id,
+        'comment',
+        String(content).trim(),
+        nowISO
+      );
 
       return res.status(201).json({
         id,
@@ -814,7 +865,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 7. Create, update, or delete project
-  app.post('/api/projects', (req, res) => {
+  app.post('/api/projects', async (req, res) => {
     try {
       const { name, code, color = '#6366f1', description = '' } = req.body || {};
       if (!name || !String(name).trim()) {
@@ -826,9 +877,15 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         String(name).trim().slice(0, 3).toUpperCase();
       const nowISO = new Date().toISOString();
 
-      db.prepare(
-        'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(id, String(name).trim(), cleanCode, color, description, nowISO);
+      await db.run(
+        'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        id,
+        String(name).trim(),
+        cleanCode,
+        color,
+        description,
+        nowISO
+      );
 
       return res.status(201).json({
         id,
@@ -843,12 +900,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.patch('/api/projects/:id', (req, res) => {
+  app.patch('/api/projects/:id', async (req, res) => {
     try {
       const projId = req.params.id;
-      const existing = db
-        .prepare('SELECT * FROM projects WHERE id = ?')
-        .get(projId);
+      const existing = await db.get(
+        'SELECT * FROM projects WHERE id = ?',
+        projId
+      );
       if (!existing) {
         return res.status(404).json({ error: '未找到该项目' });
       }
@@ -879,9 +937,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         return res.status(400).json({ error: '项目名称不能为空' });
       }
 
-      db.prepare(
-        'UPDATE projects SET name = ?, code = ?, color = ?, description = ?, pinned = ? WHERE id = ?'
-      ).run(
+      await db.run(
+        'UPDATE projects SET name = ?, code = ?, color = ?, description = ?, pinned = ? WHERE id = ?',
         nextName,
         nextCode || 'PRJ',
         nextColor,
@@ -890,9 +947,10 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         projId
       );
 
-      const updated = db
-        .prepare('SELECT * FROM projects WHERE id = ?')
-        .get(projId);
+      const updated = await db.get(
+        'SELECT * FROM projects WHERE id = ?',
+        projId
+      );
       return res.json({
         ...updated,
         pinned: Boolean(updated.pinned),
@@ -902,13 +960,14 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.delete('/api/projects/:id', (req, res) => {
+  app.delete('/api/projects/:id', async (req, res) => {
     try {
       const projId = req.params.id;
-      db.prepare(
-        'UPDATE chat_groups SET project_id = NULL WHERE project_id = ?'
-      ).run(projId);
-      db.prepare('DELETE FROM projects WHERE id = ?').run(projId);
+      await db.run(
+        'UPDATE chat_groups SET project_id = NULL WHERE project_id = ?',
+        projId
+      );
+      await db.run('DELETE FROM projects WHERE id = ?', projId);
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -916,7 +975,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 8. Create, update, or delete team member
-  app.post('/api/members', (req, res) => {
+  app.post('/api/members', async (req, res) => {
     try {
       const {
         name,
@@ -929,9 +988,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         return res.status(400).json({ error: '成员姓名不能为空' });
       }
       const id = `mem-${crypto.randomUUID().slice(0, 8)}`;
-      db.prepare(
-        'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
         id,
         String(name).trim(),
         role,
@@ -953,12 +1011,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.patch('/api/members/:id', (req, res) => {
+  app.patch('/api/members/:id', async (req, res) => {
     try {
       const memId = req.params.id;
-      const existing = db
-        .prepare('SELECT * FROM members WHERE id = ?')
-        .get(memId);
+      const existing = await db.get(
+        'SELECT * FROM members WHERE id = ?',
+        memId
+      );
       if (!existing) {
         return res.status(404).json({ error: '未找到该成员' });
       }
@@ -993,9 +1052,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         return res.status(400).json({ error: '成员姓名不能为空' });
       }
 
-      db.prepare(
-        'UPDATE members SET name = ?, role = ?, avatar_bg = ?, email = ?, capacity_hours = ?, pinned = ? WHERE id = ?'
-      ).run(
+      await db.run(
+        'UPDATE members SET name = ?, role = ?, avatar_bg = ?, email = ?, capacity_hours = ?, pinned = ? WHERE id = ?',
         nextName,
         nextRole,
         nextAvatarBg,
@@ -1005,9 +1063,10 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         memId
       );
 
-      const updated = db
-        .prepare('SELECT * FROM members WHERE id = ?')
-        .get(memId);
+      const updated = await db.get(
+        'SELECT * FROM members WHERE id = ?',
+        memId
+      );
       return res.json({
         ...updated,
         pinned: Boolean(updated.pinned),
@@ -1017,33 +1076,35 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.delete('/api/members/:id', (req, res) => {
+  app.delete('/api/members/:id', async (req, res) => {
     try {
       const memId = req.params.id;
       // Safely clear assignee_id on tasks assigned to this member
-      db.prepare('UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?').run(
+      await db.run(
+        'UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?',
         memId
       );
       // Unbind any user accounts linked to this member
-      db.prepare('UPDATE users SET member_id = NULL WHERE member_id = ?').run(
+      await db.run(
+        'UPDATE users SET member_id = NULL WHERE member_id = ?',
         memId
       );
       // Remove member ID from collaborator_ids JSON array on all tasks
-      const allTasks = db
-        .prepare('SELECT id, collaborator_ids FROM tasks')
-        .all();
-      const updateCollab = db.prepare(
-        'UPDATE tasks SET collaborator_ids = ? WHERE id = ?,'
-          .replace(',', '')
+      const allTasks = await db.all(
+        'SELECT id, collaborator_ids FROM tasks'
       );
       for (const t of allTasks) {
         const list = JSON.parse(t.collaborator_ids || '[]');
         if (Array.isArray(list) && list.includes(memId)) {
           const filtered = list.filter((id) => id !== memId);
-          updateCollab.run(JSON.stringify(filtered), t.id);
+          await db.run(
+            'UPDATE tasks SET collaborator_ids = ? WHERE id = ?',
+            JSON.stringify(filtered),
+            t.id
+          );
         }
       }
-      db.prepare('DELETE FROM members WHERE id = ?').run(memId);
+      await db.run('DELETE FROM members WHERE id = ?', memId);
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -1053,19 +1114,19 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   // ==========================================
   // 8b. Custom Project Communication Group Chats
   // ==========================================
-  app.get('/api/chat-groups', (req, res) => {
+  app.get('/api/chat-groups', async (req, res) => {
     try {
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       const visibleProjectIds = user
         ? user.permissions.visible_project_ids
         : 'all';
-      return res.json({ groups: getChatGroups(db, visibleProjectIds) });
+      return res.json({ groups: await getChatGroups(db, visibleProjectIds) });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.post('/api/chat-groups', (req, res) => {
+  app.post('/api/chat-groups', async (req, res) => {
     try {
       const {
         name,
@@ -1076,13 +1137,12 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       if (!name || !String(name).trim()) {
         return res.status(400).json({ error: '群聊名称不能为空' });
       }
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       const id = `grp-${crypto.randomUUID().slice(0, 8)}`;
       const nowISO = new Date().toISOString();
 
-      db.prepare(
-        'INSERT INTO chat_groups (id, name, description, project_id, member_ids, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO chat_groups (id, name, description, project_id, member_ids, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         id,
         String(name).trim(),
         String(description).trim(),
@@ -1108,12 +1168,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.patch('/api/chat-groups/:id', (req, res) => {
+  app.patch('/api/chat-groups/:id', async (req, res) => {
     try {
       const groupId = req.params.id;
-      const existing = db
-        .prepare('SELECT * FROM chat_groups WHERE id = ?')
-        .get(groupId);
+      const existing = await db.get(
+        'SELECT * FROM chat_groups WHERE id = ?',
+        groupId
+      );
       if (!existing) {
         return res.status(404).json({ error: '未找到该沟通群聊' });
       }
@@ -1140,11 +1201,16 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         return res.status(400).json({ error: '群聊名称不能为空' });
       }
 
-      db.prepare(
-        'UPDATE chat_groups SET name = ?, description = ?, project_id = ?, member_ids = ? WHERE id = ?'
-      ).run(nextName, nextDesc, nextProjId, nextMemIds, groupId);
+      await db.run(
+        'UPDATE chat_groups SET name = ?, description = ?, project_id = ?, member_ids = ? WHERE id = ?',
+        nextName,
+        nextDesc,
+        nextProjId,
+        nextMemIds,
+        groupId
+      );
 
-      const groups = getChatGroups(db, 'all');
+      const groups = await getChatGroups(db, 'all');
       const updated = groups.find((g) => g.id === groupId);
       return res.json(updated);
     } catch (err) {
@@ -1152,35 +1218,35 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
     }
   });
 
-  app.delete('/api/chat-groups/:id', (req, res) => {
+  app.delete('/api/chat-groups/:id', async (req, res) => {
     try {
-      db.prepare('DELETE FROM chat_groups WHERE id = ?').run(req.params.id);
+      await db.run('DELETE FROM chat_groups WHERE id = ?', req.params.id);
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.get('/api/chat-groups/:id/messages', (req, res) => {
+  app.get('/api/chat-groups/:id/messages', async (req, res) => {
     try {
       const groupId = req.params.id;
-      const messages = db
-        .prepare(
-          'SELECT * FROM chat_group_messages WHERE group_id = ? ORDER BY created_at ASC'
-        )
-        .all(groupId);
+      const messages = await db.all(
+        'SELECT * FROM chat_group_messages WHERE group_id = ? ORDER BY created_at ASC',
+        groupId
+      );
       return res.json({ messages });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.post('/api/chat-groups/:id/messages', (req, res) => {
+  app.post('/api/chat-groups/:id/messages', async (req, res) => {
     try {
       const groupId = req.params.id;
-      const group = db
-        .prepare('SELECT * FROM chat_groups WHERE id = ?')
-        .get(groupId);
+      const group = await db.get(
+        'SELECT * FROM chat_groups WHERE id = ?',
+        groupId
+      );
       if (!group) {
         return res.status(404).json({ error: '未找到该沟通群聊' });
       }
@@ -1191,13 +1257,14 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         return res.status(400).json({ error: '消息内容不能为空' });
       }
 
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       const effectiveMemberId =
         sender_member_id || (user ? user.member_id : null);
       const member = effectiveMemberId
-        ? db
-            .prepare('SELECT * FROM members WHERE id = ?')
-            .get(effectiveMemberId)
+        ? await db.get(
+          'SELECT * FROM members WHERE id = ?',
+          effectiveMemberId
+        )
         : null;
 
       const resolvedName =
@@ -1215,9 +1282,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       const msgId = `gmsg-${crypto.randomUUID().slice(0, 8)}`;
       const nowISO = new Date().toISOString();
 
-      db.prepare(
-        'INSERT INTO chat_group_messages (id, group_id, sender_user_id, sender_member_id, sender_name, sender_role, avatar_bg, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO chat_group_messages (id, group_id, sender_user_id, sender_member_id, sender_name, sender_role, avatar_bg, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         msgId,
         groupId,
         user ? user.id : null,
@@ -1229,20 +1295,23 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         nowISO
       );
 
-      const created = db
-        .prepare('SELECT * FROM chat_group_messages WHERE id = ?')
-        .get(msgId);
+      const created = await db.get(
+        'SELECT * FROM chat_group_messages WHERE id = ?',
+        msgId
+      );
       return res.status(201).json(created);
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.delete('/api/chat-groups/:groupId/messages/:msgId', (req, res) => {
+  app.delete('/api/chat-groups/:groupId/messages/:msgId', async (req, res) => {
     try {
-      db.prepare(
-        'DELETE FROM chat_group_messages WHERE id = ? AND group_id = ?'
-      ).run(req.params.msgId, req.params.groupId);
+      await db.run(
+        'DELETE FROM chat_group_messages WHERE id = ? AND group_id = ?',
+        req.params.msgId,
+        req.params.groupId
+      );
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -1250,10 +1319,10 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 9. Clear workspace data
-  app.post('/api/seed/reset', (_req, res) => {
+  app.post('/api/seed/reset', async (_req, res) => {
     try {
-      clearWorkspaceData(db);
-      const payload = getBootstrapData(db);
+      await clearWorkspaceData(db);
+      const payload = await getBootstrapData(db);
       res.json(payload);
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -1261,7 +1330,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 10. Import JSON backup
-  app.post('/api/import', (req, res) => {
+  app.post('/api/import', async (req, res) => {
     try {
       const { projects, members, tasks } = req.body || {};
       if (
@@ -1271,15 +1340,13 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
       ) {
         return res.status(400).json({ error: '导入文件格式不正确' });
       }
-      db.exec(
+      await db.exec(
         'DELETE FROM activities; DELETE FROM subtasks; DELETE FROM tasks; DELETE FROM projects; DELETE FROM members;'
       );
 
-      const insProj = db.prepare(
-        'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      );
       for (const p of projects) {
-        insProj.run(
+        await db.run(
+          'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           p.id,
           p.name,
           p.code,
@@ -1289,11 +1356,9 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         );
       }
 
-      const insMem = db.prepare(
-        'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)'
-      );
       for (const m of members) {
-        insMem.run(
+        await db.run(
+          'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
           m.id,
           m.name,
           m.role,
@@ -1303,23 +1368,15 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         );
       }
 
-      const insTask = db.prepare(`
-        INSERT INTO tasks (
-          id, task_key, title, description, project_id, status, priority,
-          due_date, assignee_id, collaborator_ids, tags, estimate_hours,
-          logged_minutes, position, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      const insSub = db.prepare(
-        'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      );
-      const insAct = db.prepare(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      );
 
       for (const t of tasks) {
         const nowISO = new Date().toISOString();
-        insTask.run(
+        await db.run(
+          `INSERT INTO tasks (
+            id, task_key, title, description, project_id, status, priority,
+            due_date, assignee_id, collaborator_ids, tags, estimate_hours,
+            logged_minutes, position, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           t.id,
           t.task_key,
           t.title,
@@ -1338,7 +1395,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
           t.updated_at || nowISO
         );
         for (const s of t.subtasks || []) {
-          insSub.run(
+          await db.run(
+            'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
             s.id || crypto.randomUUID(),
             t.id,
             s.title,
@@ -1348,7 +1406,8 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
           );
         }
         for (const a of t.activities || []) {
-          insAct.run(
+          await db.run(
+            'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
             a.id || crypto.randomUUID(),
             t.id,
             a.member_id || null,
@@ -1359,7 +1418,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         }
       }
 
-      const payload = getBootstrapData(db);
+      const payload = await getBootstrapData(db);
       return res.json(payload);
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -1367,17 +1426,17 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 11. AI Assistant Settings (Permanent SQLite persistence)
-  app.get('/api/ai/settings', (_req, res) => {
+  app.get('/api/ai/settings', async (_req, res) => {
     try {
-      res.json(getAiSettings(db));
+      res.json(await getAiSettings(db));
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.put('/api/ai/settings', (req, res) => {
+  app.put('/api/ai/settings', async (req, res) => {
     try {
-      const updated = updateAiSettings(db, req.body || {});
+      const updated = await updateAiSettings(db, req.body || {});
       res.json(updated);
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -1387,7 +1446,7 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   // 12. AI Assistant Fetch Models / Test Connection
   app.post('/api/ai/models', async (req, res) => {
     try {
-      const saved = getAiSettings(db);
+      const saved = await getAiSettings(db);
       const baseUrl = req.body?.base_url || saved.base_url;
       const apiKey =
         req.body?.api_key !== undefined ? req.body.api_key : saved.api_key;
@@ -1399,17 +1458,17 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
   });
 
   // 13. AI Assistant Chat History & Clear
-  app.get('/api/ai/messages', (_req, res) => {
+  app.get('/api/ai/messages', async (_req, res) => {
     try {
-      res.json({ messages: getAiMessages(db) });
+      res.json({ messages: await getAiMessages(db) });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
     }
   });
 
-  app.delete('/api/ai/messages', (_req, res) => {
+  app.delete('/api/ai/messages', async (_req, res) => {
     try {
-      const messages = clearAiMessages(db);
+      const messages = await clearAiMessages(db);
       res.json({ messages });
     } catch (err) {
       res.status(500).json({ error: String(err.message || err) });
@@ -1424,12 +1483,12 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
         return res.status(400).json({ error: '请输入指令或对话内容' });
       }
       const assistantMessage = await processAiChat(db, message);
-      const user = getCurrentUser(req);
+      const user = await getCurrentUser(req);
       const visibleProjectIds = user
         ? user.permissions.visible_project_ids
         : 'all';
-      const bootstrap = getBootstrapData(db, visibleProjectIds);
-      const messages = getAiMessages(db);
+      const bootstrap = await getBootstrapData(db, visibleProjectIds);
+      const messages = await getAiMessages(db);
       return res.json({
         assistantMessage,
         messages,
@@ -1452,10 +1511,10 @@ export function createApp(dbPath = path.resolve('data/flow.sqlite')) {
 
   return {
     app,
-    db,
-    closeDb: () => {
+    ready,
+    closeDb: async () => {
       try {
-        db.close();
+        await (await ready).close();
       } catch {
         // ignore
       }
