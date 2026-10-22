@@ -49,6 +49,14 @@ interface ChatPopupNotification {
   content: string;
 }
 
+// Quote every CSV cell and neutralise values a spreadsheet would run as a
+// formula (=, +, -, @ prefixes).
+function csvCell(value: unknown): string {
+  let text = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 function isSelfChatMessage(
   user: UserAccount | null,
   senderMemberId?: string | null,
@@ -305,6 +313,11 @@ export const App: React.FC = () => {
     return () => window.clearInterval(timer);
   }, [currentUser, projects, enqueueChatNotification, tr]);
 
+  // loadBootstrap changes identity with the UI language; the mount-time auth
+  // check must not re-run (and flash the sign-in check) on every toggle.
+  const loadBootstrapRef = useRef(loadBootstrap);
+  loadBootstrapRef.current = loadBootstrap;
+
   // Check Auth Status on Mount
   useEffect(() => {
     let mounted = true;
@@ -317,7 +330,7 @@ export const App: React.FC = () => {
         const user = status.currentUser || status.user || null;
         setCurrentUser(user);
         if (status.initialized && user) {
-          await loadBootstrap();
+          await loadBootstrapRef.current();
         }
       } catch {
         // Fallback if auth endpoint unreachable
@@ -328,7 +341,7 @@ export const App: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [loadBootstrap]);
+  }, []);
 
   const resetSessionState = useCallback(() => {
     setCurrentUser(null);
@@ -433,6 +446,13 @@ export const App: React.FC = () => {
   // Optimistic task update
   const handleUpdateTask = useCallback(
     async (taskId: string, patch: Partial<Task>) => {
+      if (!currentUser?.permissions.can_edit_task) {
+        showToast(
+          tr('当前账号无编辑任务权限', 'No permission to edit tasks'),
+          'error'
+        );
+        return;
+      }
       setTasks((prev) =>
         prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t))
       );
@@ -454,7 +474,7 @@ export const App: React.FC = () => {
         loadBootstrap();
       }
     },
-    [loadBootstrap, showToast, tr]
+    [currentUser, loadBootstrap, showToast, tr]
   );
 
   const handleCreateTask = async (
@@ -834,21 +854,22 @@ export const App: React.FC = () => {
     ];
     const rows = tasks.map((t) => [
       t.task_key,
-      `"${t.title.replace(/"/g, '""')}"`,
-      `"${projMap.get(t.project_id) || ''}"`,
+      t.title,
+      projMap.get(t.project_id) || '',
       t.status,
       t.priority,
       t.due_date || tr('未排期', 'Unscheduled'),
       memMap.get(t.assignee_id || '') || tr('未指派', 'Unassigned'),
-      `"${t.collaborator_ids
+      t.collaborator_ids
         .map((id) => memMap.get(id))
         .filter(Boolean)
-        .join(' / ')}"`,
+        .join(' / '),
       t.estimate_hours,
       t.logged_minutes,
     ]);
     const csvContent =
-      '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      '\uFEFF' +
+      [headers, ...rows].map((r) => r.map(csvCell).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -979,6 +1000,7 @@ export const App: React.FC = () => {
           totalTaskCount={tasks.length}
           chatGroupCount={chatGroups.length}
           canCreateTask={currentUser.permissions.can_create_task}
+          canManageWorkspace={currentUser.role === 'admin'}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode((prev) => !prev)}
           onUpdateFilter={(patch) =>
@@ -1210,10 +1232,18 @@ export const App: React.FC = () => {
         onCreateTask={handleCreateTask}
         onCreateProject={handleCreateProject}
         onUpdateProject={handleUpdateProject}
-        onDeleteProject={handleDeleteProject}
+        onDeleteProject={
+          currentUser.permissions.can_delete_project
+            ? handleDeleteProject
+            : undefined
+        }
         onCreateMember={handleCreateMember}
         onUpdateMember={handleUpdateMember}
-        onDeleteMember={handleDeleteMember}
+        onDeleteMember={
+          currentUser.permissions.can_manage_members
+            ? handleDeleteMember
+            : undefined
+        }
       />
 
       {/* Global Command Palette (Ctrl/Cmd + K) */}
@@ -1226,6 +1256,13 @@ export const App: React.FC = () => {
         onSelectView={setActiveView}
         onSelectTask={(t) => setSelectedTaskId(t.id)}
         onOpenCreateTask={() => {
+          if (!currentUser.permissions.can_create_task) {
+            showToast(
+              tr('当前账号无新建任务权限', 'No permission to create tasks'),
+              'error'
+            );
+            return;
+          }
           setQuickCreateDefaults({});
           setModalMode('task');
         }}

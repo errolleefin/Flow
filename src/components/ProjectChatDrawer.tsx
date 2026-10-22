@@ -63,6 +63,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatGroupMessage[]>([]);
   const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
 
   // Group Form State (Create / Edit)
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -77,12 +78,16 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
   const activeGroup =
     chatGroups.find((g) => g.id === activeGroupId) || null;
 
+  // Honour the requested channel only when the drawer opens (or the request
+  // changes); re-applying it on every update undid the user's own selection.
   useEffect(() => {
-    if (!isOpen) return;
-    if (initialGroupId) {
+    if (isOpen && initialGroupId) {
       setActiveGroupId(initialGroupId);
-      return;
     }
+  }, [isOpen, initialGroupId]);
+
+  useEffect(() => {
+    if (!isOpen || initialGroupId) return;
     if (
       activeGroupId &&
       chatGroups.some((g) => g.id === activeGroupId)
@@ -107,14 +112,19 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
       setMessages([]);
       return;
     }
+    // Ignore responses for a channel the user has already switched away from
+    let stale = false;
     apiClient
       .getChatGroupMessages(activeGroupId)
       .then((res) => {
-        setMessages(res.messages);
+        if (!stale) setMessages(res.messages);
       })
       .catch(() => {
-        setMessages([]);
+        if (!stale) setMessages([]);
       });
+    return () => {
+      stale = true;
+    };
   }, [isOpen, activeGroupId, activeGroup?.last_message_id]);
 
   useEffect(() => {
@@ -244,7 +254,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!activeGroup || !input.trim()) return;
+    if (!activeGroup || !input.trim() || sending) return;
+    setSending(true);
     try {
       const created = await apiClient.sendChatGroupMessage(activeGroup.id, {
         content: input.trim(),
@@ -271,6 +282,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
           : tr('发送消息失败', 'Failed to send message'),
         'error'
       );
+    } finally {
+      setSending(false);
     }
   };
 
@@ -966,7 +979,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                   />
                   <button
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || sending}
                     style={{ backgroundColor: themeColor }}
                     className="px-4 py-2 rounded-xl hover:opacity-90 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-opacity"
                   >

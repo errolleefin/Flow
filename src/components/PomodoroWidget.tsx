@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, Pause, Play, RotateCcw, Timer, X } from 'lucide-react';
 import type { Task } from '../types';
 import { useI18n } from '../i18n/I18nContext';
@@ -9,42 +9,55 @@ interface PomodoroWidgetProps {
   onLogMinutes: (taskId: string, minutesToAdd: number) => void;
 }
 
+const FOCUS_SECONDS = 25 * 60;
+
 export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
   activeTask,
   onClose,
   onLogMinutes,
 }) => {
   const { tr } = useI18n();
-  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
+  const [secondsLeft, setSecondsLeft] = useState(FOCUS_SECONDS);
   const [running, setRunning] = useState(true);
+  // Count down against a wall-clock deadline: parent re-renders and
+  // background-tab timer throttling must not slow the timer.
+  const endAtRef = useRef(Date.now() + FOCUS_SECONDS * 1000);
+  const onLogMinutesRef = useRef(onLogMinutes);
+  onLogMinutesRef.current = onLogMinutes;
+  const taskId = activeTask?.id;
 
   useEffect(() => {
-    if (activeTask) {
-      setSecondsLeft(25 * 60);
+    if (taskId) {
+      endAtRef.current = Date.now() + FOCUS_SECONDS * 1000;
+      setSecondsLeft(FOCUS_SECONDS);
       setRunning(true);
     }
-  }, [activeTask?.id]);
+  }, [taskId]);
 
   useEffect(() => {
-    if (!activeTask || !running) return;
+    if (!taskId || !running) return;
     const id = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          setRunning(false);
-          onLogMinutes(activeTask.id, 25);
-          return 25 * 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      const remaining = Math.ceil((endAtRef.current - Date.now()) / 1000);
+      if (remaining > 0) {
+        setSecondsLeft(remaining);
+        return;
+      }
+      window.clearInterval(id);
+      setRunning(false);
+      setSecondsLeft(FOCUS_SECONDS);
+      onLogMinutesRef.current(taskId, 25);
+    }, 250);
     return () => window.clearInterval(id);
-  }, [activeTask, running, onLogMinutes]);
+  }, [taskId, running]);
 
   if (!activeTask) return null;
 
   const mins = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
   const secs = String(secondsLeft % 60).padStart(2, '0');
-  const elapsedMinutes = Math.max(1, Math.round((25 * 60 - secondsLeft) / 60));
+  const elapsedMinutes = Math.max(
+    1,
+    Math.round((FOCUS_SECONDS - secondsLeft) / 60)
+  );
 
   return (
     <div className="fixed bottom-5 right-5 z-30 w-80 rounded-2xl border border-indigo-500/30 bg-white/95 dark:bg-[#131B2E]/95 backdrop-blur-md shadow-2xl p-4 space-y-3">
@@ -78,7 +91,12 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setRunning(!running)}
+            onClick={() => {
+              if (!running) {
+                endAtRef.current = Date.now() + secondsLeft * 1000;
+              }
+              setRunning(!running);
+            }}
             className="p-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
             title={running ? tr('暂停', 'Pause') : tr('继续', 'Resume')}
           >
@@ -92,7 +110,7 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
             type="button"
             onClick={() => {
               setRunning(false);
-              setSecondsLeft(25 * 60);
+              setSecondsLeft(FOCUS_SECONDS);
             }}
             className="p-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300"
             title={tr('重置 25 分钟', 'Reset 25 minutes')}

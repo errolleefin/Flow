@@ -556,25 +556,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {count}
                       </span>
                       <div className="hidden group-hover:flex items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onTogglePinProject(proj);
-                          }}
-                          className={`p-1 rounded transition-colors ${
-                            proj.pinned
-                              ? 'text-indigo-500 bg-indigo-500/10'
-                              : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
-                          }`}
-                          title={
-                            proj.pinned
-                              ? tr('取消置顶', 'Unpin Project')
-                              : tr('置顶项目', 'Pin Project')
-                          }
-                        >
-                          <Pin className="w-3 h-3" />
-                        </button>
+                        {canEditProject && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onTogglePinProject(proj);
+                            }}
+                            className={`p-1 rounded transition-colors ${
+                              proj.pinned
+                                ? 'text-indigo-500 bg-indigo-500/10'
+                                : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                            }`}
+                            title={
+                              proj.pinned
+                                ? tr('取消置顶', 'Unpin Project')
+                                : tr('置顶项目', 'Pin Project')
+                            }
+                          >
+                            <Pin className="w-3 h-3" />
+                          </button>
+                        )}
                         {canEditProject && (
                           <button
                             type="button"
@@ -702,25 +704,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {activeCount}
                       </span>
                       <div className="hidden group-hover:flex items-center gap-0.5">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onTogglePinMember(mem);
-                          }}
-                          className={`p-1 rounded transition-colors ${
-                            mem.pinned
-                              ? 'text-indigo-500 bg-indigo-500/10'
-                              : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
-                          }`}
-                          title={
-                            mem.pinned
-                              ? tr('取消置顶', 'Unpin Member')
-                              : tr('置顶人员', 'Pin Member')
-                          }
-                        >
-                          <Pin className="w-3 h-3" />
-                        </button>
+                        {canManageMembers && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onTogglePinMember(mem);
+                            }}
+                            className={`p-1 rounded transition-colors ${
+                              mem.pinned
+                                ? 'text-indigo-500 bg-indigo-500/10'
+                                : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                            }`}
+                            title={
+                              mem.pinned
+                                ? tr('取消置顶', 'Unpin Member')
+                                : tr('置顶人员', 'Pin Member')
+                            }
+                          >
+                            <Pin className="w-3 h-3" />
+                          </button>
+                        )}
                         {canManageMembers && (
                           <>
                             <button

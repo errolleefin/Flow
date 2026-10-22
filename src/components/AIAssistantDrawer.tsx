@@ -753,6 +753,8 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
+                  // Enter that confirms an IME candidate (e.g. pinyin) must not send.
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleSend();

@@ -414,7 +414,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 const collabs = t.collaborator_ids
                   .map((cid) => memberMap.get(cid))
                   .filter(Boolean);
-                const pConf = PRIORITY_CONFIG[t.priority];
+                const pConf =
+                  PRIORITY_CONFIG[t.priority] || PRIORITY_CONFIG.medium;
                 const dStatus = getDueStatus(t.due_date, t.status);
 
                 return (
