@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Node.js-v22.5%2B%20%7C%20v24%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Node.js-v22.13%2B%20%7C%20v24%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/SQLite-Native%20node%3Asqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
@@ -27,7 +27,7 @@
 ## 核心特性
 
 ### 1. 内置 AI 智能助理（OpenAI Compatible + 永久化配置）
-- **网页端可视化配置与永久保存**：支持在网页内直接配置任意 OpenAI 兼容接口（OpenAI、DeepSeek、硅基流动 SiliconFlow、阿里云百炼 DashScope、OpenRouter、本地 Ollama 等），URL / Model / API Key 永久持久化保存至数据库。
+- **网页端可视化配置与永久保存**：支持在网页内直接配置任意 OpenAI 兼容接口（OpenAI、DeepSeek、硅基流动 SiliconFlow、阿里云百炼 DashScope、OpenRouter、本地 Ollama 等），URL / Model / API Key 永久持久化保存至数据库。接口配置仅超级管理员可见，API Key 保存后只回显脱敏值。
 - **自然语言自动拆单与录入数据库**：直接发送口语指令或粘贴会议纪要，AI 自动识别并创建/修改/删除所属项目、团队相关人员（主负责 + 多协作人），自动推算截止日期 (`YYYY-MM-DD`)、判定四级优先级并拆解生成子任务检查清单 (`Subtasks`)。
 - **可视化入库回执卡片**：每次对话执行的数据库变更均生成交互式回执卡片，点击即可打开任务详情，且底层看板实时同步刷新。
 
@@ -61,7 +61,7 @@
 
 ### 5. 极客级 UI/UX 与效率赋能
 - **极简左侧导航与拖拽排序/折叠/置顶能力**：左侧「视图导航」支持**自定义上下拖拽调整顺序与单个视图置顶**；「项目列表」与「相关人员」均支持**点击标题折叠/展开**、**默认展示前 5 项并支持一键展开全部**，以及**单个项目或人员的永久置顶（Pin）**。
-- **顶部右对齐全局操作栏**：导出（JSON / CSV）、导入、清空工作区、中英双语切换、明暗主题切换、项目群聊、AI 智能助理与新建任务按钮统一集成在页面顶部右侧对齐，消除左右菜单功能重复。
+- **顶部右对齐全局操作栏**：导出（JSON / CSV）、导入、清空工作区、中英双语切换、明暗主题切换、项目群聊、AI 智能助理与新建任务按钮统一集成在页面顶部右侧对齐，消除左右菜单功能重复（导入与清空工作区仅超级管理员可见）。
 - **子任务完成时间自动记录与展示**：在任务详情抽屉中点击完成任意子任务时，数据库自动记录完成时间戳（`completed_at`），并在该子任务右侧实时显示完成时间。
 - **项目与人员全生命周期管理**：左侧导航栏与看板列头均支持一键新建、编辑、删除项目和相关人员；删除人员时自动将关联任务平顺解绑为未指派，保障任务数据安全。
 - **键盘流快捷键**：`Ctrl/Cmd + K` 唤起全局命令面板、`N` 键单键速建任务、`Ctrl/Cmd + J` 唤起 AI 智能助理、`Esc` 关闭抽屉。
@@ -80,7 +80,7 @@
 ### 方式一：Windows 本地部署（一键启动）
 
 #### 1. 环境准备
-安装 [Node.js v22.5+ 或 v24 LTS](https://nodejs.org/)（推荐使用 Node.js v24，内置原生 `node:sqlite` 引擎，无需配置任何外部数据库或 C++ 编译工具）。
+安装 [Node.js v22.13+ 或 v24 LTS](https://nodejs.org/)（推荐使用 Node.js v24，内置原生 `node:sqlite` 引擎，无需配置任何外部数据库或 C++ 编译工具；v22.13 之前的版本需要实验参数才能使用 `node:sqlite`，无法直接启动）。
 
 #### 2. 一键启动并自动打开网页
 直接双击项目根目录下的 **[`start.bat`](./start.bat)** 脚本：
@@ -199,16 +199,15 @@ server {
 
 ### 方式四：Vercel + Supabase 云端部署（Serverless 架构）
 
-项目已内置 [`vercel.json`](./vercel.json)、Serverless 路由入口 [`api/index.mjs`](./api/index.mjs) 以及 Supabase PostgreSQL 数据库迁移脚本 [`supabase/schema.sql`](./supabase/schema.sql)。
+项目已内置 [`vercel.json`](./vercel.json)、Serverless 路由入口 [`api/index.mjs`](./api/index.mjs) 与 PostgreSQL 存储层。设置环境变量 `DATABASE_URL` 后，服务端改用 PostgreSQL（Supabase）保存全部数据；未设置时使用本地 SQLite。
 
-#### 1. 初始化 Supabase 数据库
+> Vercel 函数的文件系统是临时的，SQLite 数据会随冷启动丢失（并重新开放「初始化超级管理员」页面），因此在 Vercel 上未配置 `DATABASE_URL` 时，所有 `/api` 请求都会返回 503。
+
+#### 1. 准备 Supabase 数据库
 1. 登录 [Supabase Dashboard](https://supabase.com/dashboard) 并创建一个新项目（New Project）。
-2. 进入左侧菜单的 **SQL Editor** -> **New Query**。
-3. 复制本仓库 [`supabase/schema.sql`](./supabase/schema.sql) 中的全部 SQL 内容，粘贴并点击 **Run**，即可一键创建 `projects`、`members`、`tasks`、`subtasks`、`activities`、`ai_settings`、`ai_messages`、`users`、`sessions`、`chat_groups` 与 `chat_group_messages` 共 11 张数据表。
-4. 在 Supabase 的 **Project Settings -> API / Database** 中获取：
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `DATABASE_URL`（Transaction/Session Pooler 连接串）
+2. 点击项目页顶部的 **Connect**，复制 **Transaction pooler** 连接串（端口 `6543`，用户名形如 `postgres.<project-ref>`），并将 `[YOUR-PASSWORD]` 替换为数据库密码。Vercel 只支持 IPv4 出站，而直连地址 `db.<project-ref>.supabase.co` 默认只提供 IPv6，因此请使用 pooler 连接串。
+3. 无需手动建表：服务首次连接时会自动、幂等地创建 `projects`、`members`、`tasks`、`subtasks`、`activities`、`ai_settings`、`ai_messages`、`users`、`sessions`、`chat_groups` 与 `chat_group_messages` 共 11 张数据表，并执行后续版本的列迁移。也可以在 **SQL Editor** 中手动运行 [`supabase/schema.sql`](./supabase/schema.sql)，其内容与自动建表一致。
+4. 所有表都会开启行级安全（RLS）且不添加任何策略：Flow 以表所有者身份连接，不受 RLS 限制；Supabase Data API（anon / authenticated key）则无法读取这些表，避免密码哈希、会话 token 与 AI Key 经由 Data API 泄露。Flow 不需要 `SUPABASE_URL` 或 `SUPABASE_SERVICE_ROLE_KEY`。
 
 #### 2. 一键部署至 Vercel
 1. 将本仓库 Fork 或推送到你的 GitHub 账号下。
@@ -216,19 +215,39 @@ server {
 3. **Framework Preset** 选择 `Vite`，Build Command 保持 `npm run build`，Output Directory 保持 `dist`（Vercel 会自动识别根目录下的 [`vercel.json`](./vercel.json)）。
 4. 在 **Environment Variables** 中添加环境变量（参考 [`.env.example`](./.env.example)）：
    ```env
-   SUPABASE_URL=https://your-project-id.supabase.co
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-   DATABASE_URL=postgresql://postgres:[PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+   DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+   # 可选：校验数据库服务器证书（证书在 Supabase 的 Database Settings -> SSL Configuration 下载）
+   # FLOW_PG_SSL_CA=-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----
    ```
-5. 点击 **Deploy** 完成部署。同时你也可以随时通过网页顶部导航栏的「JSON 导出 / 导入」功能，在本地 SQLite 版本与云端版本之间无缝迁移所有任务、项目与人员数据。
+   未设置 `FLOW_PG_SSL_CA` 时连接仍会加密，但不校验服务器证书，启动日志中会给出提示。
+5. 点击 **Deploy** 完成部署，然后尽快访问站点完成「初始化超级管理员」（初始化完成前，任何能访问该地址的人都可以抢先注册管理员）。之后可通过顶部导航栏的「JSON 导出 / 导入」（仅超级管理员可见），在本地 SQLite 版本与云端版本之间迁移任务、项目与人员数据。
+
+---
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `PORT` | `3001` | 服务监听端口 |
+| `HOST` | `0.0.0.0` | 服务监听地址 |
+| `FLOW_DB_PATH` | `./data/flow.sqlite` | SQLite 数据库文件路径（未设置 `DATABASE_URL` 时使用） |
+| `DATABASE_URL` | 未设置 | PostgreSQL / Supabase 连接串，设置后改用 PostgreSQL。本机地址默认不启用 SSL，其他地址默认启用，可通过 `?sslmode=disable` 关闭 |
+| `FLOW_PG_SSL_CA` | 未设置 | 数据库服务器的 CA 证书（PEM，可用 `\n` 表示换行），设置后校验服务器证书 |
+| `FLOW_PG_POOL_MAX` | `3` | 每个服务实例的 PostgreSQL 连接池大小 |
+| `FLOW_SESSION_TTL_DAYS` | `30` | 登录会话有效天数 |
+| `FLOW_CORS_ORIGIN` | 未设置 | 允许跨域调用 API 的来源（逗号分隔）。默认不开启 CORS：开发时由 Vite 代理 `/api`，生产环境同源访问 |
 
 ---
 
 ## 开发与自动化测试
 
 ```bash
-# 运行后端数据库、日期算法、过滤器与 AI 助理全套单元测试
+# 运行后端数据库、权限、日期算法、过滤器与 AI 助理全套测试（需要 Node.js v22.18+，测试会直接导入 .ts 源文件）
 npm test
+
+# 使用 PostgreSQL 运行同一套测试：需要有 CREATE DATABASE 权限的账号（PostgreSQL 13+），
+# 每个用例会新建一个 flow_test_* 临时库并在结束后删除
+FLOW_TEST_DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/postgres npm test
 
 # TypeScript 类型检查与生产包构建
 npm run build

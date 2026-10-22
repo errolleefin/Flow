@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Node.js-v22.5%2B%20%7C%20v24%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Node.js-v22.13%2B%20%7C%20v24%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/SQLite-Native%20node%3Asqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
@@ -27,7 +27,7 @@
 ## Key Features
 
 ### 1. Built-in AI Assistant (OpenAI-Compatible + Persistent Configuration)
-- **Web-Based Visual Configuration & Persistent Storage**: Configure any OpenAI-compatible endpoint directly in the web UI (OpenAI, DeepSeek, SiliconFlow, DashScope, OpenRouter, local Ollama, etc.). The Base URL, Model name, and API Key are permanently persisted in the database.
+- **Web-Based Visual Configuration & Persistent Storage**: Configure any OpenAI-compatible endpoint directly in the web UI (OpenAI, DeepSeek, SiliconFlow, DashScope, OpenRouter, local Ollama, etc.). The Base URL, Model name, and API Key are permanently persisted in the database. Only Super Admins can open the endpoint settings, and a saved API Key is only ever shown masked.
 - **Natural Language Task Decomposition & Database Ingestion**: Send conversational commands or paste raw meeting notes to automatically create, update, or delete projects, team members (primary assignee + collaborators), tasks, due dates (`YYYY-MM-DD`), 4-tier priorities, and structured checklists (`Subtasks`).
 - **Interactive Execution Receipts**: Every database action performed by the AI generates an interactive receipt card in the chat stream. Click any task receipt to inspect its detail drawer while all boards synchronize in real time.
 
@@ -61,7 +61,7 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 
 ### 5. Developer-Grade UI/UX & Productivity Tooling
 - **Streamlined Sidebar with Drag-to-Reorder Views, Collapsible Sections, Top-5 View & Pinning**: The 5 Board Views in the left sidebar support **custom drag-and-drop reordering and view pinning**, while both Projects and Team Members sections support **click-to-collapse/expand**, **showing the top 5 items by default with a one-click "Show All" toggle**, and **pinning (`Pin`) individual projects or members** to the top.
-- **Right-Aligned Top Action Toolbar**: All workspace utility and action buttons starting from Export (`JSON` / `CSV`), Import, Clear Workspace, Language Toggle (`中 / EN`), Theme Toggle, Group Chat, AI Assistant, and New Task are cleanly right-aligned at the top of the page with zero duplicate menus between sidebar and header.
+- **Right-Aligned Top Action Toolbar**: All workspace utility and action buttons starting from Export (`JSON` / `CSV`), Import, Clear Workspace, Language Toggle (`中 / EN`), Theme Toggle, Group Chat, AI Assistant, and New Task are cleanly right-aligned at the top of the page with zero duplicate menus between sidebar and header (Import and Clear Workspace are shown to Super Admins only).
 - **Subtask Completion Timestamps**: Checking off a subtask in the task detail drawer automatically records the completion time (`completed_at`) and displays the formatted timestamp on the right side of the subtask row.
 - **Full Lifecycle Management for Projects & Personnel**: Create, edit, and delete projects and team members directly from the sidebar or board column headers. Deleting a member safely unassigns their tasks without data loss.
 - **Keyboard-First Navigation**: Press `Ctrl/Cmd + K` for the global Command Palette, `N` for quick task creation, `Ctrl/Cmd + J` to toggle the AI Assistant, and `Esc` to dismiss active drawers or modals.
@@ -80,7 +80,7 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 ### Option 1: Windows Local Deployment (One-Click Launcher)
 
 #### 1. Prerequisites
-Install [Node.js v22.5+ or v24 LTS](https://nodejs.org/) (Node.js v24 is recommended as it includes the built-in native `node:sqlite` engine with zero external database or C++ build tool dependencies).
+Install [Node.js v22.13+ or v24 LTS](https://nodejs.org/) (Node.js v24 is recommended as it includes the built-in native `node:sqlite` engine with zero external database or C++ build tool dependencies; releases before v22.13 only expose `node:sqlite` behind an experimental flag and cannot start Flow as-is).
 
 #### 2. One-Click Start & Auto-Open Browser
 Double-click **[`start.bat`](./start.bat)** in the project root:
@@ -199,16 +199,15 @@ server {
 
 ### Option 4: Vercel + Supabase Cloud Deployment (Serverless Architecture)
 
-The repository includes [`vercel.json`](./vercel.json), the Serverless entry point [`api/index.mjs`](./api/index.mjs), and the Supabase PostgreSQL schema migration script [`supabase/schema.sql`](./supabase/schema.sql).
+The repository includes [`vercel.json`](./vercel.json), the Serverless entry point [`api/index.mjs`](./api/index.mjs), and a PostgreSQL storage layer. When the `DATABASE_URL` environment variable is set, the server stores all data in PostgreSQL (Supabase); otherwise it uses local SQLite.
 
-#### 1. Initialize Supabase Database
+> Vercel functions have an ephemeral file system, so SQLite data would be lost on every cold start (re-opening the first-time admin setup page). On Vercel without `DATABASE_URL`, every `/api` request therefore returns 503.
+
+#### 1. Prepare the Supabase Database
 1. Sign in to the [Supabase Dashboard](https://supabase.com/dashboard) and create a **New Project**.
-2. Open **SQL Editor** -> **New Query** in the left sidebar.
-3. Copy the entire contents of [`supabase/schema.sql`](./supabase/schema.sql), paste it into the editor, and click **Run** to create the 11 required tables (`projects`, `members`, `tasks`, `subtasks`, `activities`, `ai_settings`, `ai_messages`, `users`, `sessions`, `chat_groups`, and `chat_group_messages`).
-4. Retrieve your credentials from **Project Settings -> API / Database**:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `DATABASE_URL` (Transaction/Session Pooler connection string)
+2. Click **Connect** at the top of the project page and copy the **Transaction pooler** connection string (port `6543`, user name like `postgres.<project-ref>`), replacing `[YOUR-PASSWORD]` with your database password. Vercel only supports outbound IPv4, while the direct host `db.<project-ref>.supabase.co` is IPv6-only by default, so use the pooler string.
+3. No manual migration is needed: on first connection the server idempotently creates the 11 tables (`projects`, `members`, `tasks`, `subtasks`, `activities`, `ai_settings`, `ai_messages`, `users`, `sessions`, `chat_groups`, and `chat_group_messages`) and applies later column migrations. You can also run [`supabase/schema.sql`](./supabase/schema.sql) in the **SQL Editor**; it matches the automatic schema exactly.
+4. Row Level Security is enabled on every table with no policies: Flow connects as the table owner and is not restricted by RLS, while the Supabase Data API (anon / authenticated keys) cannot read these tables, which keeps password hashes, session tokens, and the AI key from leaking through it. Flow does not need `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY`.
 
 #### 2. Deploy to Vercel
 1. Fork or push this repository to your GitHub account.
@@ -216,19 +215,40 @@ The repository includes [`vercel.json`](./vercel.json), the Serverless entry poi
 3. Select `Vite` as the **Framework Preset**, keep Build Command as `npm run build`, and Output Directory as `dist` (Vercel automatically detects [`vercel.json`](./vercel.json)).
 4. Configure the **Environment Variables** (see [`.env.example`](./.env.example)):
    ```env
-   SUPABASE_URL=https://your-project-id.supabase.co
-   SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-   DATABASE_URL=postgresql://postgres:[PASSWORD]@db.your-project-id.supabase.co:5432/postgres
+   DATABASE_URL=postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+   # Optional: verify the database server certificate (download it from Supabase Database Settings -> SSL Configuration)
+   # FLOW_PG_SSL_CA=-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----
    ```
-5. Click **Deploy**. You can also migrate all your tasks, projects, and members between local SQLite and cloud deployments at any time using the **JSON Export / Import** menu in the top header.
+   Without `FLOW_PG_SSL_CA` the connection is still encrypted, but the server certificate is not verified and the startup log says so.
+5. Click **Deploy**, then open the site right away and complete the **First-Time Super Admin Setup** (until it is done, anyone who can reach the URL can claim the admin account). You can then migrate tasks, projects, and members between local SQLite and cloud deployments with **JSON Export / Import** in the top header (Super Admins only).
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PORT` | `3001` | Port the server listens on |
+| `HOST` | `0.0.0.0` | Address the server listens on |
+| `FLOW_DB_PATH` | `./data/flow.sqlite` | SQLite database file (used when `DATABASE_URL` is not set) |
+| `DATABASE_URL` | not set | PostgreSQL / Supabase connection string; switches storage to PostgreSQL. SSL is off for local hosts and on for all others; add `?sslmode=disable` to turn it off |
+| `FLOW_PG_SSL_CA` | not set | CA certificate of the database server (PEM, `\n` allowed for line breaks); enables certificate verification |
+| `FLOW_PG_POOL_MAX` | `3` | PostgreSQL connection pool size per server instance |
+| `FLOW_SESSION_TTL_DAYS` | `30` | Login session lifetime in days |
+| `FLOW_CORS_ORIGIN` | not set | Comma-separated origins allowed to call the API cross-origin. CORS is off by default: Vite proxies `/api` in development and production is same-origin |
 
 ---
 
 ## Development & Automated Tests
 
 ```bash
-# Run the full unit & integration test suite (Database CRUD, Date Utils, Task Filters, AI Assistant)
+# Run the full test suite (Database CRUD, permissions, Date Utils, Task Filters, AI Assistant).
+# Requires Node.js v22.18+ because the tests import .ts sources directly.
 npm test
+
+# Run the same suite against PostgreSQL: needs a role allowed to CREATE DATABASE (PostgreSQL 13+);
+# every test creates a temporary flow_test_* database and drops it afterwards
+FLOW_TEST_DATABASE_URL=postgres://postgres:password@127.0.0.1:5432/postgres npm test
 
 # TypeScript type-checking and production bundle build
 npm run build
