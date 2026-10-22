@@ -22,8 +22,6 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY server ./server
-COPY src/utils ./src/utils
-COPY src/types ./src/types
 
 RUN mkdir -p /app/data
 VOLUME ["/app/data"]

@@ -223,3 +223,79 @@ test('stored API key is only sent to the endpoint it was saved for', async (t) =
   assert.equal(toSaved.status, 200);
   assert.equal(saved.requests.at(-1).authorization, 'Bearer sk-saved-secret');
 });
+
+test('AI actions validate fields, keep task keys unique and share cascades', async (t) => {
+  let nextReply = { reply: 'ok', actions: [] };
+  const mock = await startMockOpenAI(t, () => nextReply);
+  const { api } = await startTestApp(t);
+  const { token } = await setupAdmin(api, { create_member: false });
+  await api('PUT', '/api/ai/settings', {
+    token,
+    body: { base_url: mock.baseUrl, api_key: 'sk-test-key-1234', model: 'gpt-4o-mini' },
+  });
+  const chat = async (actions, extra = {}) => {
+    nextReply = { reply: '完成', actions };
+    const res = await api('POST', '/api/ai/chat', {
+      token,
+      body: { message: '执行', ...extra },
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    return res.data;
+  };
+
+  // Empty workspace and no project name: a default project is created instead of crashing
+  const first = await chat([{ type: 'create_task', title: '第一项任务' }], {
+    client_today: '2026-01-05',
+  });
+  assert.equal(first.bootstrap.projects.length, 1);
+  assert.equal(first.bootstrap.tasks.length, 1);
+  // The model is told the user's local date, not the server's
+  assert.match(mock.requests.at(-1).body.messages[0].content, /今天日期：2026-01-05 \(周一\)/);
+
+  await chat([{ type: 'create_project', name: '核心', code: 'COR' }]);
+  const created = await chat([
+    { type: 'create_task', title: 'A', project_name: '核心' },
+    { type: 'create_task', title: 'B', project_name: '核心' },
+  ]);
+  const keyOf = (data, title) => data.bootstrap.tasks.find((tk) => tk.title === title).task_key;
+  assert.equal(keyOf(created, 'A'), 'COR-101');
+  assert.equal(keyOf(created, 'B'), 'COR-102');
+  await chat([{ type: 'delete_task', task_key: 'COR-101' }]);
+  const third = await chat([{ type: 'create_task', title: 'C', project_name: '核心' }]);
+  assert.equal(keyOf(third, 'C'), 'COR-103');
+  const afterDelete = await chat([{ type: 'delete_task', task_key: 'COR-103' }]);
+  assert.deepEqual(
+    afterDelete.bootstrap.tasks.map((tk) => tk.title).sort(),
+    ['B', '第一项任务'],
+    'deleting COR-103 must remove C, not B'
+  );
+
+  // Invalid values from the model are ignored; documented fields are applied
+  const updated = await chat([
+    {
+      type: 'update_task',
+      task_key: 'COR-102',
+      status: 'completed',
+      priority: '紧急',
+      due_date: 'next friday',
+      new_title: 'B（改名）',
+      estimate_hours: 9,
+    },
+  ]);
+  const b = updated.bootstrap.tasks.find((tk) => tk.task_key === 'COR-102');
+  assert.equal(b.status, 'todo');
+  assert.equal(b.priority, 'medium');
+  assert.equal(b.due_date, null);
+  assert.equal(b.title, 'B（改名）');
+  assert.equal(b.estimate_hours, 9);
+
+  // Deleting a member through the AI unbinds accounts like the REST API does
+  const { user } = await createUserAndLogin(api, token, {
+    username: 'dave',
+    display_name: 'Dave',
+    auto_create_member: true,
+  });
+  await chat([{ type: 'delete_member', name: 'Dave' }]);
+  const users = (await api('GET', '/api/users', { token })).data.users;
+  assert.equal(users.find((u) => u.id === user.id).member_id, null);
+});

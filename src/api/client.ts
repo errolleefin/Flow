@@ -14,6 +14,7 @@ import type {
   UserAccount,
   UserPermissions,
 } from '../types';
+import { getTodayISO } from '../utils/dateUtils';
 
 const AUTH_TOKEN_KEY = 'flow-auth-token';
 
@@ -323,6 +324,7 @@ export const apiClient = {
       method: 'DELETE',
     }),
 
+  // client_today lets the AI resolve "明天" in the user's timezone, not the server's.
   sendAiChat: (message: string) =>
     request<{
       assistantMessage: AiChatMessage;
@@ -330,6 +332,6 @@ export const apiClient = {
       bootstrap: BootstrapPayload;
     }>('/api/ai/chat', {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, client_today: getTodayISO() }),
     }),
 };

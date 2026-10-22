@@ -15,8 +15,19 @@ import {
   normalizePermissions,
   canSeeProject,
   grantProjectVisibility,
+  nextTaskKey,
+  deleteMemberCascade,
+  deleteProjectCascade,
   DEFAULT_ROLE_PERMISSIONS,
 } from './db.mjs';
+import {
+  TASK_STATUSES,
+  TASK_PRIORITIES,
+  isIsoDate,
+  isHexColor,
+  isStringArray,
+  isNonNegativeNumber,
+} from './validation.mjs';
 import {
   getAiSettings,
   updateAiSettings,
@@ -67,6 +78,101 @@ function maskApiKey(key) {
   if (!key) return '';
   if (key.length <= 8) return '••••';
   return `${key.slice(0, 3)}••••${key.slice(-4)}`;
+}
+
+// Returns an error message for the first invalid task field that is present.
+function validateTaskFields(fields) {
+  if (fields.status !== undefined && !TASK_STATUSES.includes(fields.status)) {
+    return '无效的任务状态';
+  }
+  if (
+    fields.priority !== undefined &&
+    !TASK_PRIORITIES.includes(fields.priority)
+  ) {
+    return '无效的优先级';
+  }
+  if (
+    fields.due_date !== undefined &&
+    fields.due_date !== null &&
+    fields.due_date !== '' &&
+    !isIsoDate(fields.due_date)
+  ) {
+    return '截止日期格式应为 YYYY-MM-DD';
+  }
+  for (const key of ['collaborator_ids', 'tags']) {
+    if (fields[key] !== undefined && !isStringArray(fields[key])) {
+      return `${key} 必须是字符串数组`;
+    }
+  }
+  for (const key of ['estimate_hours', 'logged_minutes', 'position']) {
+    if (fields[key] !== undefined && !isNonNegativeNumber(fields[key])) {
+      return `${key} 必须是非负数字`;
+    }
+  }
+  return null;
+}
+
+// Checks a JSON backup before anything is deleted; returns the first problem.
+function validateBackup({ projects, members, tasks }) {
+  if (
+    !Array.isArray(projects) ||
+    !Array.isArray(members) ||
+    !Array.isArray(tasks)
+  ) {
+    return '缺少 projects / members / tasks 数组';
+  }
+  const isText = (v) => typeof v === 'string' && v.trim() !== '';
+  const projectIds = new Set();
+  for (const [i, p] of projects.entries()) {
+    if (!p || !isText(p.id) || !isText(p.name) || !isText(p.code)) {
+      return `第 ${i + 1} 个项目缺少 id、名称或编号前缀`;
+    }
+    if (!isHexColor(p.color)) return `项目「${p.name}」的颜色格式无效`;
+    if (projectIds.has(p.id)) return `项目 ID 重复：${p.id}`;
+    projectIds.add(p.id);
+  }
+  const memberIds = new Set();
+  for (const [i, m] of members.entries()) {
+    if (!m || !isText(m.id) || !isText(m.name)) {
+      return `第 ${i + 1} 个成员缺少 id 或姓名`;
+    }
+    if (memberIds.has(m.id)) return `成员 ID 重复：${m.id}`;
+    memberIds.add(m.id);
+  }
+  const taskIds = new Set();
+  for (const [i, t] of tasks.entries()) {
+    if (!t || !isText(t.id) || !isText(t.task_key) || !isText(t.title)) {
+      return `第 ${i + 1} 个任务缺少 id、编号或名称`;
+    }
+    if (!projectIds.has(t.project_id)) {
+      return `任务「${t.title}」所属的项目不在备份中`;
+    }
+    if (taskIds.has(t.id)) return `任务 ID 重复：${t.id}`;
+    taskIds.add(t.id);
+    const invalid = validateTaskFields({
+      status: t.status ?? undefined,
+      priority: t.priority ?? undefined,
+      due_date: t.due_date ?? undefined,
+      collaborator_ids: t.collaborator_ids ?? undefined,
+      tags: t.tags ?? undefined,
+      estimate_hours: t.estimate_hours ?? undefined,
+      logged_minutes: t.logged_minutes ?? undefined,
+      position: t.position ?? undefined,
+    });
+    if (invalid) return `任务「${t.title}」：${invalid}`;
+    const subtasks = t.subtasks ?? [];
+    if (!Array.isArray(subtasks) || subtasks.some((s) => !s || !isText(s.title))) {
+      return `任务「${t.title}」包含无效的子任务`;
+    }
+    const activities = t.activities ?? [];
+    if (
+      !Array.isArray(activities) ||
+      activities.some((a) => !a || typeof a.content !== 'string')
+    ) {
+      return `任务「${t.title}」包含无效的动态记录`;
+    }
+  }
+  return null;
 }
 
 // Never send the stored API key back to the browser.
@@ -733,27 +839,47 @@ export function createApp(options = {}) {
       if (!title || !String(title).trim()) {
         return res.status(400).json({ error: '任务名称不能为空' });
       }
+      const invalid = validateTaskFields({
+        status,
+        priority,
+        due_date,
+        collaborator_ids,
+        tags,
+        estimate_hours,
+      });
+      if (invalid) {
+        return res.status(400).json({ error: invalid });
+      }
+      if (
+        assignee_id &&
+        !(await db.get('SELECT id FROM members WHERE id = ?', assignee_id))
+      ) {
+        return res.status(400).json({ error: '负责人不存在' });
+      }
 
-      let resolvedProjectId = project_id;
-      let project = resolvedProjectId
-        ? await db.get('SELECT * FROM projects WHERE id = ?', resolvedProjectId)
+      let project = project_id
+        ? await db.get('SELECT * FROM projects WHERE id = ?', project_id)
         : null;
       if (project && !canSeeProject(req.user, project.id)) {
         return res.status(404).json({ error: '未找到该项目' });
       }
-
       if (!project) {
-        const firstProj = (
-          await db.all('SELECT * FROM projects ORDER BY created_at ASC')
-        ).find((p) => canSeeProject(req.user, p.id));
-        if (firstProj) {
-          project = firstProj;
-          resolvedProjectId = firstProj.id;
-        } else if (!req.user.permissions.can_create_project) {
-          return res
-            .status(400)
-            .json({ error: '当前没有可用的项目，请联系管理员创建项目' });
-        } else {
+        project =
+          (await db.all('SELECT * FROM projects ORDER BY created_at ASC')).find(
+            (p) => canSeeProject(req.user, p.id)
+          ) || null;
+      }
+      if (!project && !req.user.permissions.can_create_project) {
+        return res
+          .status(400)
+          .json({ error: '当前没有可用的项目，请联系管理员创建项目' });
+      }
+
+      const id = `task-${crypto.randomUUID().slice(0, 8)}`;
+      const nowISO = new Date().toISOString();
+
+      await db.transaction(async (tx) => {
+        if (!project) {
           const newProjId = `proj-${crypto.randomUUID().slice(0, 8)}`;
           const projName = req.body.project_name
             ? String(req.body.project_name).trim()
@@ -763,88 +889,72 @@ export function createApp(options = {}) {
               .replace(/[^a-zA-Z0-9]/g, '')
               .slice(0, 3)
               .toUpperCase() || 'FLW';
-          const now = new Date().toISOString();
-          await db.run(
+          await tx.run(
             'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
             newProjId,
             projName,
             projCode,
             '#6366f1',
             '自动创建的初始工作项目',
-            now
+            nowISO
           );
-          project = await db.get(
-            'SELECT * FROM projects WHERE id = ?',
-            newProjId
-          );
-          resolvedProjectId = newProjId;
-          await grantProjectVisibility(db, req.user, newProjId);
+          await grantProjectVisibility(tx, req.user, newProjId);
+          project = await tx.get('SELECT * FROM projects WHERE id = ?', newProjId);
         }
-      }
 
-      const codePrefix = project ? project.code : 'FLW';
-      const existingCount = await db.get(
-        'SELECT COUNT(*) as cnt FROM tasks WHERE project_id = ?',
-        resolvedProjectId
-      );
-      const nextNum = 101 + (existingCount?.cnt || 0);
-      const taskKey = `${codePrefix}-${nextNum}`;
+        const taskKey = await nextTaskKey(tx, project.code);
+        const maxPosRow = await tx.get(
+          'SELECT MAX(position) as maxPos FROM tasks'
+        );
+        const position = (Number(maxPosRow?.maxPos) || 0) + 1;
 
-      const maxPosRow = await db.get(
-        'SELECT MAX(position) as maxPos FROM tasks'
-      );
-      const position = (maxPosRow?.maxPos || 0) + 1;
+        await tx.run(
+          `INSERT INTO tasks (
+            id, task_key, title, description, project_id, status, priority,
+            due_date, assignee_id, collaborator_ids, tags, estimate_hours,
+            logged_minutes, position, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id,
+          taskKey,
+          String(title).trim(),
+          String(description ?? ''),
+          project.id,
+          status,
+          priority,
+          due_date || null,
+          assignee_id || null,
+          JSON.stringify(collaborator_ids),
+          JSON.stringify(tags),
+          Number(estimate_hours) || 4,
+          0,
+          position,
+          nowISO,
+          nowISO
+        );
 
-      const id = `task-${crypto.randomUUID().slice(0, 8)}`;
-      const nowISO = new Date().toISOString();
+        await insertActivity(
+          tx,
+          id,
+          req.user,
+          'system',
+          `创建了任务 [${taskKey}] ${String(title).trim()}`,
+          nowISO
+        );
 
-      await db.run(
-        `INSERT INTO tasks (
-          id, task_key, title, description, project_id, status, priority,
-          due_date, assignee_id, collaborator_ids, tags, estimate_hours,
-          logged_minutes, position, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        id,
-        taskKey,
-        String(title).trim(),
-        description,
-        resolvedProjectId,
-        status,
-        priority,
-        due_date || null,
-        assignee_id || null,
-        JSON.stringify(Array.isArray(collaborator_ids) ? collaborator_ids : []),
-        JSON.stringify(Array.isArray(tags) ? tags : []),
-        Number(estimate_hours) || 4,
-        0,
-        position,
-        nowISO,
-        nowISO
-      );
-
-      await insertActivity(
-        db,
-        id,
-        req.user,
-        'system',
-        `创建了任务 [${taskKey}] ${String(title).trim()}`,
-        nowISO
-      );
-
-      if (Array.isArray(subtasks) && subtasks.length > 0) {
-        for (const subTitle of subtasks) {
-          if (typeof subTitle === 'string' && subTitle.trim()) {
-            await db.run(
-              'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)',
-              crypto.randomUUID(),
-              id,
-              subTitle.trim(),
-              0,
-              nowISO
-            );
+        if (Array.isArray(subtasks)) {
+          for (const subTitle of subtasks) {
+            if (typeof subTitle === 'string' && subTitle.trim()) {
+              await tx.run(
+                'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, FALSE, NULL, ?)',
+                crypto.randomUUID(),
+                id,
+                subTitle.trim(),
+                nowISO
+              );
+            }
           }
         }
-      }
+      });
 
       const fullTask = await getFullTaskById(db, id);
       return res.status(201).json(fullTask);
@@ -863,6 +973,20 @@ export function createApp(options = {}) {
       }
 
       const updates = req.body || {};
+      const invalid = validateTaskFields(updates);
+      if (invalid) {
+        return res.status(400).json({ error: invalid });
+      }
+      if (updates.title !== undefined && !String(updates.title).trim()) {
+        return res.status(400).json({ error: '任务名称不能为空' });
+      }
+      if (
+        updates.assignee_id &&
+        updates.assignee_id !== existing.assignee_id &&
+        !(await db.get('SELECT id FROM members WHERE id = ?', updates.assignee_id))
+      ) {
+        return res.status(400).json({ error: '负责人不存在' });
+      }
       const nowISO = new Date().toISOString();
       const changes = [];
 
@@ -872,7 +996,7 @@ export function createApp(options = {}) {
           : existing.title;
       const nextDesc =
         updates.description !== undefined
-          ? String(updates.description)
+          ? String(updates.description ?? '')
           : existing.description;
       const nextProjectId =
         updates.project_id !== undefined
@@ -1136,6 +1260,9 @@ export function createApp(options = {}) {
       if (!name || !String(name).trim()) {
         return res.status(400).json({ error: '项目名称不能为空' });
       }
+      if (!isHexColor(color)) {
+        return res.status(400).json({ error: '项目颜色格式应为 #RRGGBB' });
+      }
       const id = `proj-${crypto.randomUUID().slice(0, 8)}`;
       const cleanCode =
         (code && String(code).trim().toUpperCase()) ||
@@ -1202,6 +1329,9 @@ export function createApp(options = {}) {
       if (!nextName) {
         return res.status(400).json({ error: '项目名称不能为空' });
       }
+      if (req.body.color !== undefined && !isHexColor(nextColor)) {
+        return res.status(400).json({ error: '项目颜色格式应为 #RRGGBB' });
+      }
 
       await db.run(
         'UPDATE projects SET name = ?, code = ?, color = ?, description = ?, pinned = ? WHERE id = ?',
@@ -1232,11 +1362,7 @@ export function createApp(options = {}) {
       if (!canSeeProject(req.user, projId)) {
         return res.status(404).json({ error: '未找到该项目' });
       }
-      await db.run(
-        'UPDATE chat_groups SET project_id = NULL WHERE project_id = ?',
-        projId
-      );
-      await db.run('DELETE FROM projects WHERE id = ?', projId);
+      await db.transaction((tx) => deleteProjectCascade(tx, projId));
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -1348,32 +1474,8 @@ export function createApp(options = {}) {
   app.delete('/api/members/:id', requirePerm('can_manage_members'), async (req, res) => {
     try {
       const memId = req.params.id;
-      // Safely clear assignee_id on tasks assigned to this member
-      await db.run(
-        'UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?',
-        memId
-      );
-      // Unbind any user accounts linked to this member
-      await db.run(
-        'UPDATE users SET member_id = NULL WHERE member_id = ?',
-        memId
-      );
-      // Remove member ID from collaborator_ids JSON array on all tasks
-      const allTasks = await db.all(
-        'SELECT id, collaborator_ids FROM tasks'
-      );
-      for (const t of allTasks) {
-        const list = JSON.parse(t.collaborator_ids || '[]');
-        if (Array.isArray(list) && list.includes(memId)) {
-          const filtered = list.filter((id) => id !== memId);
-          await db.run(
-            'UPDATE tasks SET collaborator_ids = ? WHERE id = ?',
-            JSON.stringify(filtered),
-            t.id
-          );
-        }
-      }
-      await db.run('DELETE FROM members WHERE id = ?', memId);
+      // Unassigns tasks, unbinds accounts and chat groups, then deletes the member
+      await db.transaction((tx) => deleteMemberCascade(tx, memId));
       return res.json({ ok: true });
     } catch (err) {
       return res.status(500).json({ error: String(err.message || err) });
@@ -1617,7 +1719,7 @@ export function createApp(options = {}) {
   // 9. Clear workspace data
   app.post('/api/seed/reset', requireAdmin, async (_req, res) => {
     try {
-      await clearWorkspaceData(db);
+      await db.transaction((tx) => clearWorkspaceData(tx));
       const payload = await getBootstrapData(db);
       res.json(payload);
     } catch (err) {
@@ -1625,94 +1727,108 @@ export function createApp(options = {}) {
     }
   });
 
-  // 10. Import JSON backup
+  // 10. Import JSON backup (validated first, then replaced atomically)
   app.post('/api/import', requireAdmin, async (req, res) => {
     try {
-      const { projects, members, tasks } = req.body || {};
-      if (
-        !Array.isArray(projects) ||
-        !Array.isArray(members) ||
-        !Array.isArray(tasks)
-      ) {
-        return res.status(400).json({ error: '导入文件格式不正确' });
+      const backup = req.body || {};
+      const problem = validateBackup(backup);
+      if (problem) {
+        return res.status(400).json({ error: `导入文件格式不正确：${problem}` });
       }
-      await db.exec(
-        'DELETE FROM activities; DELETE FROM subtasks; DELETE FROM tasks; DELETE FROM projects; DELETE FROM members;'
-      );
+      const { projects, members, tasks } = backup;
+      const memberIds = new Set(members.map((m) => m.id));
+      const nowISO = new Date().toISOString();
 
-      for (const p of projects) {
-        await db.run(
-          'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          p.id,
-          p.name,
-          p.code,
-          p.color,
-          p.description || '',
-          p.created_at || new Date().toISOString()
+      await db.transaction(async (tx) => {
+        await tx.exec(
+          'DELETE FROM activities; DELETE FROM subtasks; DELETE FROM tasks; DELETE FROM projects; DELETE FROM members;'
         );
-      }
 
-      for (const m of members) {
-        await db.run(
-          'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
-          m.id,
-          m.name,
-          m.role,
-          m.avatar_bg,
-          m.email || '',
-          m.capacity_hours || 40
-        );
-      }
-
-
-      for (const t of tasks) {
-        const nowISO = new Date().toISOString();
-        await db.run(
-          `INSERT INTO tasks (
-            id, task_key, title, description, project_id, status, priority,
-            due_date, assignee_id, collaborator_ids, tags, estimate_hours,
-            logged_minutes, position, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          t.id,
-          t.task_key,
-          t.title,
-          t.description || '',
-          t.project_id,
-          t.status || 'todo',
-          t.priority || 'medium',
-          t.due_date || null,
-          t.assignee_id || null,
-          JSON.stringify(t.collaborator_ids || []),
-          JSON.stringify(t.tags || []),
-          t.estimate_hours || 4,
-          t.logged_minutes || 0,
-          t.position || 0,
-          t.created_at || nowISO,
-          t.updated_at || nowISO
-        );
-        for (const s of t.subtasks || []) {
-          await db.run(
-            'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            s.id || crypto.randomUUID(),
-            t.id,
-            s.title,
-            s.completed ? 1 : 0,
-            s.completed ? s.completed_at || nowISO : null,
-            s.created_at || nowISO
+        for (const p of projects) {
+          await tx.run(
+            'INSERT INTO projects (id, name, code, color, description, pinned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            p.id,
+            p.name,
+            p.code,
+            p.color,
+            p.description || '',
+            p.pinned ? 1 : 0,
+            p.created_at || nowISO
           );
         }
-        for (const a of t.activities || []) {
-          await db.run(
-            'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            a.id || crypto.randomUUID(),
-            t.id,
-            a.member_id || null,
-            a.type || 'system',
-            a.content,
-            a.created_at || nowISO
+
+        for (const m of members) {
+          await tx.run(
+            'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours, pinned) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            m.id,
+            m.name,
+            m.role || '团队成员',
+            m.avatar_bg || 'from-indigo-500 to-purple-600',
+            m.email || '',
+            Number(m.capacity_hours) || 40,
+            m.pinned ? 1 : 0
           );
         }
-      }
+
+        for (const t of tasks) {
+          await tx.run(
+            `INSERT INTO tasks (
+              id, task_key, title, description, project_id, status, priority,
+              due_date, assignee_id, collaborator_ids, tags, estimate_hours,
+              logged_minutes, position, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            t.id,
+            t.task_key,
+            t.title,
+            t.description || '',
+            t.project_id,
+            t.status || 'todo',
+            t.priority || 'medium',
+            t.due_date || null,
+            memberIds.has(t.assignee_id) ? t.assignee_id : null,
+            JSON.stringify(
+              (t.collaborator_ids || []).filter((id) => memberIds.has(id))
+            ),
+            JSON.stringify(t.tags || []),
+            Number(t.estimate_hours) || 4,
+            Number(t.logged_minutes) || 0,
+            Number(t.position) || 0,
+            t.created_at || nowISO,
+            t.updated_at || nowISO
+          );
+          for (const sub of t.subtasks || []) {
+            await tx.run(
+              'INSERT INTO subtasks (id, task_id, title, completed, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+              sub.id || crypto.randomUUID(),
+              t.id,
+              sub.title,
+              sub.completed ? 1 : 0,
+              sub.completed ? sub.completed_at || nowISO : null,
+              sub.created_at || nowISO
+            );
+          }
+          for (const a of t.activities || []) {
+            await tx.run(
+              'INSERT INTO activities (id, task_id, member_id, actor_name, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              a.id || crypto.randomUUID(),
+              t.id,
+              a.member_id || null,
+              a.actor_name || null,
+              a.type === 'comment' ? 'comment' : 'system',
+              a.content,
+              a.created_at || nowISO
+            );
+          }
+        }
+
+        // Drop references to members/projects that the backup replaced.
+        await tx.run(
+          'UPDATE users SET member_id = NULL WHERE member_id IS NOT NULL AND member_id NOT IN (SELECT id FROM members)'
+        );
+        await tx.run(
+          'UPDATE chat_groups SET project_id = NULL WHERE project_id IS NOT NULL AND project_id NOT IN (SELECT id FROM projects)'
+        );
+      });
 
       const payload = await getBootstrapData(db);
       return res.json(payload);
@@ -1782,11 +1898,16 @@ export function createApp(options = {}) {
   // 14. AI Assistant Natural Language Command -> Auto DB Ingestion
   app.post('/api/ai/chat', async (req, res) => {
     try {
-      const { message } = req.body || {};
+      const { message, client_today: clientToday } = req.body || {};
       if (!message || !String(message).trim()) {
         return res.status(400).json({ error: '请输入指令或对话内容' });
       }
-      const assistantMessage = await processAiChat(db, message, req.user);
+      const assistantMessage = await processAiChat(
+        db,
+        message,
+        req.user,
+        clientToday
+      );
       const bootstrap = await getBootstrapData(
         db,
         req.user.permissions.visible_project_ids

@@ -356,6 +356,77 @@ async function seedDefaults(db) {
   }
 }
 
+// JSON array columns can hold legacy junk such as "null"; treat it as empty.
+export function parseJsonArray(raw) {
+  try {
+    const value = JSON.parse(raw || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+// One more than the highest number used by any task with this prefix, so keys
+// never repeat after deletions, project moves or shared project codes.
+// Call inside a transaction: on Postgres the lock serializes concurrent creators.
+export async function nextTaskKey(db, code) {
+  const prefix = `${code}-`;
+  await db.lock(`task_key:${prefix}`);
+  const rows = await db.all(
+    'SELECT task_key FROM tasks WHERE substr(task_key, 1, ?) = ?',
+    prefix.length,
+    prefix
+  );
+  let max = 100;
+  for (const { task_key: key } of rows) {
+    const n = Number(key.slice(prefix.length));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return `${prefix}${max + 1}`;
+}
+
+// Shared by the REST API and the AI assistant so both clean up the same way.
+export async function deleteMemberCascade(db, memberId) {
+  await db.run(
+    'UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?',
+    memberId
+  );
+  await db.run(
+    'UPDATE users SET member_id = NULL WHERE member_id = ?',
+    memberId
+  );
+  for (const t of await db.all('SELECT id, collaborator_ids FROM tasks')) {
+    const list = parseJsonArray(t.collaborator_ids);
+    if (list.includes(memberId)) {
+      await db.run(
+        'UPDATE tasks SET collaborator_ids = ? WHERE id = ?',
+        JSON.stringify(list.filter((id) => id !== memberId)),
+        t.id
+      );
+    }
+  }
+  for (const g of await db.all('SELECT id, member_ids FROM chat_groups')) {
+    const list = parseJsonArray(g.member_ids);
+    if (list.includes(memberId)) {
+      await db.run(
+        'UPDATE chat_groups SET member_ids = ? WHERE id = ?',
+        JSON.stringify(list.filter((id) => id !== memberId)),
+        g.id
+      );
+    }
+  }
+  await db.run('DELETE FROM members WHERE id = ?', memberId);
+}
+
+// Tasks (and their subtasks/activities) go with the project via ON DELETE CASCADE.
+export async function deleteProjectCascade(db, projectId) {
+  await db.run(
+    'UPDATE chat_groups SET project_id = NULL WHERE project_id = ?',
+    projectId
+  );
+  await db.run('DELETE FROM projects WHERE id = ?', projectId);
+}
+
 export async function clearWorkspaceData(db) {
   await db.exec(
     'DELETE FROM chat_group_messages; DELETE FROM chat_groups; DELETE FROM activities; DELETE FROM subtasks; DELETE FROM tasks; DELETE FROM projects; DELETE FROM members; UPDATE users SET member_id = NULL;'
@@ -382,8 +453,8 @@ export async function getFullTaskById(db, taskId) {
 
   return {
     ...row,
-    collaborator_ids: JSON.parse(row.collaborator_ids || '[]'),
-    tags: JSON.parse(row.tags || '[]'),
+    collaborator_ids: parseJsonArray(row.collaborator_ids),
+    tags: parseJsonArray(row.tags),
     subtasks,
     activities,
   };
@@ -423,7 +494,7 @@ export async function getChatGroups(db, visibleProjectIds = 'all') {
       return {
         ...g,
         project_id: g.project_id || null,
-        member_ids: JSON.parse(g.member_ids || '[]'),
+        member_ids: parseJsonArray(g.member_ids),
         message_count: st ? Number(st.cnt) : 0,
         last_message_at: st ? st.last_at : null,
         last_message_id: lastMsg ? lastMsg.id : null,
@@ -491,8 +562,8 @@ export async function getBootstrapData(db, visibleProjectIds = 'all') {
 
   const tasks = taskRows.map((row) => ({
     ...row,
-    collaborator_ids: JSON.parse(row.collaborator_ids || '[]'),
-    tags: JSON.parse(row.tags || '[]'),
+    collaborator_ids: parseJsonArray(row.collaborator_ids),
+    tags: parseJsonArray(row.tags),
     subtasks: subtasksByTask.get(row.id) || [],
     activities: activitiesByTask.get(row.id) || [],
   }));
