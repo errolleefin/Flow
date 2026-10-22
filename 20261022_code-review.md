@@ -45,9 +45,10 @@
   - 番茄钟：修复前 10.5 秒只走了 8 秒，修复后 10 秒走 10 秒。
   - 成员账号：看不到导入、清空和 AI 接口配置，任务详情只读。
   - 其他交互：删除任务前弹出确认；输入法组字时按回车不发送；CSV 导出正确转义。
-- **未验证**：
-  - 没有在真实的 Vercel / Supabase 环境部署，PostgreSQL 路径只在本地 PostgreSQL 16 上测试过。
-  - `npm audit` 因沙箱网络超时未能运行。
+- **依赖审计**：
+  - `npm audit --omit=dev`（生产依赖）：0 个漏洞。
+  - 完整 `npm audit`：9 个（3 moderate、6 high），全部来自开发与构建工具链（vite 5、tailwindcss 3 及其间接依赖），不进入生产运行时，见建议 8。
+- **未验证**：没有在真实的 Vercel / Supabase 环境部署，PostgreSQL 路径只在本地 PostgreSQL 16 上测试过。
 
 ## 3. 发现与处理
 
@@ -173,7 +174,7 @@
 - **修复**：
   - 服务端校验 status / priority 枚举、`YYYY-MM-DD` 日期、字符串数组、非负数和 `#RRGGBB` 颜色，非法值返回 400。
   - `AnalyticsView` 遇到未知优先级时回退到默认配置。
-- **剩余**：ErrorBoundary 仍未添加，见建议 17。
+- **剩余**：ErrorBoundary 仍未添加，见建议 18。
 - **测试**：`tests/integrity.test.mjs`「task, project and chat input is validated」。
 
 #### M5 活动审计记错人（已修复，`2b2abc1`、`85a0244`）
@@ -256,7 +257,7 @@
 - **已修复**：
   - 切换频道后，旧频道的请求结果不再覆盖新频道。
   - 发送按钮在请求期间加锁，防止重复提交。
-- **未修复**：删除最新一条消息后，上一条消息会被当作新消息再次弹出通知，见建议 8。
+- **未修复**：删除最新一条消息后，上一条消息会被当作新消息再次弹出通知，见建议 9。
 
 #### L5 项目颜色可注入 CSS（已修复，`85a0244`）
 - **位置**：颜色值被拼进 `style`，可以写入 `url(...)` 发起外部请求。
@@ -271,13 +272,13 @@
 
 #### L8 `start.bat` 的问题（部分修复，`a69ccc6`）
 - **已修复**：中文被双重编码，显示为乱码（Git 历史中从未有过正确版本）。现已恢复为 UTF-8，其余内容按字节保持不变。
-- **未修复**：脚本会强杀所有占用 3001 / 5173 端口的进程，见建议 20。
+- **未修复**：脚本会强杀所有占用 3001 / 5173 端口的进程，见建议 21。
 
 #### L9 其他（未修复，见建议）
 - 首次初始化时，谁先访问谁就能注册为管理员（建议 1）。两个请求并发初始化、产生两个管理员的问题已用事务和锁修复（`2b2abc1`）。
 - 500 错误直接回显内部异常信息（建议 6）。
-- 新建表单可重复提交，失败后弹窗关闭、输入丢失（建议 9）。
-- Docker 以 root 运行（建议 21）。
+- 新建表单可重复提交，失败后弹窗关闭、输入丢失（建议 10）。
+- Docker 以 root 运行（建议 22）。
 
 ## 4. 未实施的建议
 
@@ -300,35 +301,45 @@
    - 建议记录日志、返回通用提示。数据库初始化失败时的 503 已经这样处理。
 7. **群聊成员名单不参与访问控制**：可见性只按项目判断，跨项目频道对所有登录用户可见，`member_ids` 只用于展示。
    - 如果需要「仅群成员可见」，应在服务端按 `member_ids` 过滤。
+8. **开发工具链存在已知漏洞**：完整 `npm audit` 报告 9 个漏洞（3 moderate、6 high）。
+   - 涉及的包：
+     - vite 5.4.21：开发服务器路径穿越；`server.fs.deny` 在 Windows 上可被绕过。
+     - esbuild 0.21.5：任意网站都能向开发服务器发请求并读取响应（该问题针对 esbuild 自带的 serve 功能）。
+     - tailwindcss 3 的间接依赖：braces、micromatch、postcss-selector-parser 存在拒绝服务问题。
+   - 生产运行时不受影响（生产依赖 0 漏洞），但 `npm run dev` 以 `vite --host` 启动，开发服务器监听所有网卡。`start.bat` 走的正是这条路径，局域网内的其他设备也能访问这个受影响的开发服务器。
+   - 建议：
+     - 升级 vite 到已修复的版本（npm audit 建议 8.x），并同步升级 `@vitejs/plugin-react`。
+     - 评估 tailwindcss 3 → 4 的大版本迁移。
+     - 升级之前，先把 `--host` 改为按需开启。
 
 ### 正确性
 
-8. **删除消息后误弹通知**：轮询只比较 `last_message_id`，删除最新消息后，上一条会被当作新消息弹出。
+9. **删除消息后误弹通知**：轮询只比较 `last_message_id`，删除最新消息后，上一条会被当作新消息弹出。
    - 建议改为比较消息时间，只在 `created_at` 晚于已读时间时提醒。
-9. **新建表单可重复提交**：`CreateTaskModal` 在 `await onCreateTask()` 之后无条件 `onClose()`，而 `handleCreateTask` 会吞掉错误；提交期间按钮也不会禁用。
+10. **新建表单可重复提交**：`CreateTaskModal` 在 `await onCreateTask()` 之后无条件 `onClose()`，而 `handleCreateTask` 会吞掉错误；提交期间按钮也不会禁用。
    - 建议让创建函数返回是否成功，失败时保留弹窗，并在提交期间禁用按钮。
-10. **工时累加在前端计算**：番茄钟结束时，前端按 `logged_minutes + 分钟数` 写回，两个窗口同时结算会互相覆盖。
+11. **工时累加在前端计算**：番茄钟结束时，前端按 `logged_minutes + 分钟数` 写回，两个窗口同时结算会互相覆盖。
     - 建议增加服务端原子累加：`UPDATE … SET logged_minutes = logged_minutes + ?`。
 
 ### 性能与可维护性
 
-11. **轮询引起整页重渲染**：群聊每 3.5 秒轮询一次，并且无条件调用 `setChatGroups`，即使数据没变也会让 App 和所有看板重渲染（这也是 M8 的诱因）。
+12. **轮询引起整页重渲染**：群聊每 3.5 秒轮询一次，并且无条件调用 `setChatGroups`，即使数据没变也会让 App 和所有看板重渲染（这也是 M8 的诱因）。
     - 建议先比较再 `setState`，看板组件使用 `React.memo`，或改为增量拉取 / SSE。
-12. **SQLite 缺少索引**：PostgreSQL 的表结构为 `tasks` 的 `project_id` / `status` / `due_date`，以及 `subtasks.task_id`、`activities.task_id`、`chat_group_messages.group_id` 建了索引，SQLite 一个都没有。数据量大时 bootstrap 和级联删除都会全表扫描。
+13. **SQLite 缺少索引**：PostgreSQL 的表结构为 `tasks` 的 `project_id` / `status` / `due_date`，以及 `subtasks.task_id`、`activities.task_id`、`chat_group_messages.group_id` 建了索引，SQLite 一个都没有。数据量大时 bootstrap 和级联删除都会全表扫描。
     - 建议在 SQLite 中补上同样的索引。
-13. **REST 与 AI 各有一套写入逻辑**：任务的增删改在 `app.mjs` 和 `aiService.mjs` 中各实现了一遍。M1、M2、L7 都源于两边不一致；本次只抽出了编号、校验和级联删除。
+14. **REST 与 AI 各有一套写入逻辑**：任务的增删改在 `app.mjs` 和 `aiService.mjs` 中各实现了一遍。M1、M2、L7 都源于两边不一致；本次只抽出了编号、校验和级联删除。
     - 建议继续收敛为共用的 service 层。
-14. **`App.tsx` 过大**：1,462 行，状态、轮询、通知和权限判断混在一起。建议按领域拆分为 hooks，例如认证、数据加载、群聊通知。
-15. **角色默认权限定义了两份**：`server/db.mjs` 的 `DEFAULT_ROLE_PERMISSIONS` 与 `AccountManagementModal.tsx` 的 `ROLE_META` 各有一份，容易不同步。
+15. **`App.tsx` 过大**：1,462 行，状态、轮询、通知和权限判断混在一起。建议按领域拆分为 hooks，例如认证、数据加载、群聊通知。
+16. **角色默认权限定义了两份**：`server/db.mjs` 的 `DEFAULT_ROLE_PERMISSIONS` 与 `AccountManagementModal.tsx` 的 `ROLE_META` 各有一份，容易不同步。
     - 建议由服务端下发，或放进前后端共享的模块。
-16. **缺少安全响应头**：没有设置 CSP、`X-Content-Type-Options` 等。建议在生产环境使用 `helmet` 或手动设置。
-17. **没有 ErrorBoundary**：任何渲染异常都会让整页白屏（M4 就是一例）。建议在顶层加一个 ErrorBoundary。
-18. **缺少 CI 与静态检查**：仓库没有 CI、ESLint，也不做依赖审计。
+17. **缺少安全响应头**：没有设置 CSP、`X-Content-Type-Options` 等。建议在生产环境使用 `helmet` 或手动设置。
+18. **没有 ErrorBoundary**：任何渲染异常都会让整页白屏（M4 就是一例）。建议在顶层加一个 ErrorBoundary。
+19. **缺少 CI 与静态检查**：仓库没有 CI、ESLint，也不做依赖审计。
     - 建议在 CI 中运行 `npm test`（SQLite 一次，再用 PostgreSQL 服务容器跑一次）、`npm run build`、ESLint 和 `npm audit`。
 
 ### 其他
 
-19. **版本号不一致**：`AuthScreen.tsx` 显示 v0.1，`package.json` 与 README 为 0.2。
-20. **`start.bat` 强杀端口进程**：任何占用 3001 / 5173 端口的进程都会被结束，包括与 Flow 无关的程序。
+20. **版本号不一致**：`AuthScreen.tsx` 显示 v0.1，`package.json` 与 README 为 0.2。
+21. **`start.bat` 强杀端口进程**：任何占用 3001 / 5173 端口的进程都会被结束，包括与 Flow 无关的程序。
     - 建议只提示端口被占用，或者只结束由本脚本启动的进程。
-21. **Docker 以 root 运行**：建议在镜像中加上 `USER node`，并确保 `/app/data` 对该用户可写。
+22. **Docker 以 root 运行**：建议在镜像中加上 `USER node`，并确保 `/app/data` 对该用户可写。
