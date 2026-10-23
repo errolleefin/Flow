@@ -22,7 +22,8 @@ const TABLES = [
 
 test('supabase/schema.sql matches the schema the server applies', () => {
   const file = fs.readFileSync(new URL('../supabase/schema.sql', import.meta.url), 'utf8');
-  assert.ok(file.includes(PG_SCHEMA_SQL.trim()), 'run the generator in server/pgSchema.mjs docs');
+  const normalize = s => s.replace(/\r\n/g, '\n');
+  assert.ok(normalize(file).includes(normalize(PG_SCHEMA_SQL).trim()), 'run the generator in server/pgSchema.mjs docs');
   for (const table of TABLES) {
     assert.ok(file.includes(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;`), table);
   }
