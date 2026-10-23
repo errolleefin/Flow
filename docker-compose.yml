@@ -14,3 +14,5 @@ services:
       - PORT=3001
       - HOST=0.0.0.0
       - FLOW_DB_PATH=/app/data/flow.sqlite
+      # Optional: store data in PostgreSQL / Supabase instead of SQLite
+      # - DATABASE_URL=postgresql://user:password@host:6543/postgres

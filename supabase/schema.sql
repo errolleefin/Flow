@@ -1,5 +1,7 @@
--- Flow Workspace — Supabase (PostgreSQL) Schema Migration
--- Run this script in your Supabase SQL Editor when deploying with Vercel + Supabase
+-- Flow Workspace — Supabase / PostgreSQL schema
+-- Flow applies this automatically on startup when DATABASE_URL is set; you can
+-- also run it once in the Supabase SQL Editor. Safe to re-run.
+-- Source of truth: server/pgSchema.mjs (kept in sync by tests/schema.test.mjs).
 
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
@@ -18,7 +20,8 @@ CREATE TABLE IF NOT EXISTS members (
   avatar_bg TEXT NOT NULL DEFAULT 'from-indigo-500 to-purple-600',
   email TEXT DEFAULT '',
   capacity_hours INTEGER NOT NULL DEFAULT 40,
-  pinned BOOLEAN NOT NULL DEFAULT FALSE
+  pinned BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -53,6 +56,7 @@ CREATE TABLE IF NOT EXISTS activities (
   id TEXT PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   member_id TEXT,
+  actor_name TEXT DEFAULT NULL,
   type TEXT NOT NULL DEFAULT 'system',
   content TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -73,6 +77,7 @@ ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ai_messages (
   id TEXT PRIMARY KEY,
+  user_id TEXT DEFAULT NULL,
   role TEXT NOT NULL,
   content TEXT NOT NULL,
   operations JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -118,9 +123,30 @@ CREATE TABLE IF NOT EXISTS chat_group_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Columns added after the first schema release
+ALTER TABLE members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp();
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS actor_name TEXT DEFAULT NULL;
+ALTER TABLE ai_messages ADD COLUMN IF NOT EXISTS user_id TEXT DEFAULT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 CREATE INDEX IF NOT EXISTS idx_subtasks_task_id ON subtasks(task_id);
 CREATE INDEX IF NOT EXISTS idx_activities_task_id ON activities(task_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_group_id ON chat_group_messages(group_id);
+
+-- Flow connects as the table owner, which bypasses row level security.
+-- Enabling RLS without policies keeps Supabase's Data API (anon /
+-- authenticated keys) from reading these tables, which hold password
+-- hashes, session tokens and the AI API key.
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subtasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_group_messages ENABLE ROW LEVEL SECURITY;

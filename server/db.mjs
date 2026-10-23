@@ -1,7 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
-import fs from 'node:fs';
-import path from 'node:path';
 import crypto from 'node:crypto';
+import { openStorage } from './storage.mjs';
+import { PG_SCHEMA_SQL } from './pgSchema.mjs';
 
 export const DEFAULT_ROLE_PERMISSIONS = {
   admin: {
@@ -130,6 +129,29 @@ export function normalizePermissions(role, customPerms) {
   };
 }
 
+export function canSeeProject(user, projectId) {
+  const visible = user.permissions.visible_project_ids;
+  return (
+    visible === 'all' || (Array.isArray(visible) && visible.includes(projectId))
+  );
+}
+
+// A user limited to specific projects must keep seeing the ones they create.
+export async function grantProjectVisibility(db, user, projectId) {
+  const visible = user.permissions.visible_project_ids;
+  if (!Array.isArray(visible) || visible.includes(projectId)) return;
+  const nextPerms = {
+    ...user.permissions,
+    visible_project_ids: [...visible, projectId],
+  };
+  await db.run(
+    'UPDATE users SET permissions = ? WHERE id = ?',
+    JSON.stringify(nextPerms),
+    user.id
+  );
+  user.permissions = nextPerms;
+}
+
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const derived = crypto.scryptSync(String(password), salt, 64).toString('hex');
@@ -165,17 +187,31 @@ export function serializeUser(row) {
   };
 }
 
-export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
-  const dir = path.dirname(dbPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+export async function openDatabase({ dbPath, databaseUrl } = {}) {
+  const db = await openStorage({ dbPath, databaseUrl });
+  if (db.dialect === 'postgres') {
+    await initPostgresSchema(db);
+  } else {
+    await initSqliteSchema(db);
   }
+  await seedDefaults(db);
+  return db;
+}
 
-  const db = new DatabaseSync(dbPath);
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec('PRAGMA foreign_keys = ON;');
+// Several serverless instances may start at once; the advisory lock makes them
+// apply the (idempotent) schema one after another.
+async function initPostgresSchema(db) {
+  await db.transaction(async (tx) => {
+    await tx.lock('flow:schema');
+    await tx.exec(PG_SCHEMA_SQL);
+  });
+}
 
-  db.exec(`
+async function initSqliteSchema(db) {
+  await db.exec('PRAGMA journal_mode = WAL;');
+  await db.exec('PRAGMA foreign_keys = ON;');
+
+  await db.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -230,6 +266,7 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
       member_id TEXT,
+      actor_name TEXT DEFAULT NULL,
       type TEXT NOT NULL,
       content TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -247,6 +284,7 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
 
     CREATE TABLE IF NOT EXISTS ai_messages (
       id TEXT PRIMARY KEY,
+      user_id TEXT DEFAULT NULL,
       role TEXT NOT NULL,
       content TEXT NOT NULL,
       operations TEXT DEFAULT '[]',
@@ -296,24 +334,33 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
   `);
 
   // Safe migration for existing databases missing subtasks.completed_at or pinned columns
-  const subCols = db.prepare('PRAGMA table_info(subtasks)').all();
+  const subCols = await db.all('PRAGMA table_info(subtasks)');
   if (!subCols.some((c) => c.name === 'completed_at')) {
-    db.exec('ALTER TABLE subtasks ADD COLUMN completed_at TEXT DEFAULT NULL;');
+    await db.exec('ALTER TABLE subtasks ADD COLUMN completed_at TEXT DEFAULT NULL;');
   }
-  const projCols = db.prepare('PRAGMA table_info(projects)').all();
+  const projCols = await db.all('PRAGMA table_info(projects)');
   if (!projCols.some((c) => c.name === 'pinned')) {
-    db.exec('ALTER TABLE projects ADD COLUMN pinned INTEGER DEFAULT 0;');
+    await db.exec('ALTER TABLE projects ADD COLUMN pinned INTEGER DEFAULT 0;');
   }
-  const memCols = db.prepare('PRAGMA table_info(members)').all();
+  const memCols = await db.all('PRAGMA table_info(members)');
   if (!memCols.some((c) => c.name === 'pinned')) {
-    db.exec('ALTER TABLE members ADD COLUMN pinned INTEGER DEFAULT 0;');
+    await db.exec('ALTER TABLE members ADD COLUMN pinned INTEGER DEFAULT 0;');
   }
+  const actCols = await db.all('PRAGMA table_info(activities)');
+  if (!actCols.some((c) => c.name === 'actor_name')) {
+    await db.exec('ALTER TABLE activities ADD COLUMN actor_name TEXT DEFAULT NULL;');
+  }
+  const aiMsgCols = await db.all('PRAGMA table_info(ai_messages)');
+  if (!aiMsgCols.some((c) => c.name === 'user_id')) {
+    await db.exec('ALTER TABLE ai_messages ADD COLUMN user_id TEXT DEFAULT NULL;');
+  }
+}
 
-  const aiRow = db.prepare('SELECT id FROM ai_settings WHERE id = 1').get();
+async function seedDefaults(db) {
+  const aiRow = await db.get('SELECT id FROM ai_settings WHERE id = 1');
   if (!aiRow) {
-    db.prepare(
-      'INSERT INTO ai_settings (id, base_url, api_key, model, temperature, updated_at) VALUES (1, ?, ?, ?, ?, ?)'
-    ).run(
+    await db.run(
+      'INSERT INTO ai_settings (id, base_url, api_key, model, temperature, updated_at) VALUES (1, ?, ?, ?, ?, ?)',
       'https://api.openai.com/v1',
       '',
       'gpt-4o-mini',
@@ -321,79 +368,130 @@ export function initDatabase(dbPath = path.resolve('data/flow.sqlite')) {
       new Date().toISOString()
     );
   }
-
-  const msgCountRow = db
-    .prepare('SELECT COUNT(*) as cnt FROM ai_messages')
-    .get();
-  if (!msgCountRow || msgCountRow.cnt === 0) {
-    db.prepare(
-      'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(
-      crypto.randomUUID(),
-      'assistant',
-      '你好！我是 **Flow AI 智能助理**。你可以先在右上角「接口配置」中永久保存你的 OpenAI 兼容 API（支持 OpenAI、DeepSeek、硅基流动、OpenRouter、阿里云百炼、本地 Ollama 等），然后直接用自然语言向我发送任务指令或粘贴会议纪要，我会自动为你提取 **任务名称、所属项目、截止日期、相关人员（主负责与协作人）、优先级与子任务清单** 并录入数据库！',
-      '[]',
-      new Date().toISOString()
-    );
-  }
-
-  return db;
 }
 
-export function clearWorkspaceData(db) {
-  db.exec(
+// JSON array columns can hold legacy junk such as "null"; treat it as empty.
+export function parseJsonArray(raw) {
+  try {
+    const value = JSON.parse(raw || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+// One more than the highest number used by any task with this prefix, so keys
+// never repeat after deletions, project moves or shared project codes.
+// Call inside a transaction: on Postgres the lock serializes concurrent creators.
+export async function nextTaskKey(db, code) {
+  const prefix = `${code}-`;
+  await db.lock(`task_key:${prefix}`);
+  const rows = await db.all(
+    'SELECT task_key FROM tasks WHERE substr(task_key, 1, ?) = ?',
+    prefix.length,
+    prefix
+  );
+  let max = 100;
+  for (const { task_key: key } of rows) {
+    const n = Number(key.slice(prefix.length));
+    if (Number.isInteger(n) && n > max) max = n;
+  }
+  return `${prefix}${max + 1}`;
+}
+
+// Shared by the REST API and the AI assistant so both clean up the same way.
+export async function deleteMemberCascade(db, memberId) {
+  await db.run(
+    'UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?',
+    memberId
+  );
+  await db.run(
+    'UPDATE users SET member_id = NULL WHERE member_id = ?',
+    memberId
+  );
+  for (const t of await db.all('SELECT id, collaborator_ids FROM tasks')) {
+    const list = parseJsonArray(t.collaborator_ids);
+    if (list.includes(memberId)) {
+      await db.run(
+        'UPDATE tasks SET collaborator_ids = ? WHERE id = ?',
+        JSON.stringify(list.filter((id) => id !== memberId)),
+        t.id
+      );
+    }
+  }
+  for (const g of await db.all('SELECT id, member_ids FROM chat_groups')) {
+    const list = parseJsonArray(g.member_ids);
+    if (list.includes(memberId)) {
+      await db.run(
+        'UPDATE chat_groups SET member_ids = ? WHERE id = ?',
+        JSON.stringify(list.filter((id) => id !== memberId)),
+        g.id
+      );
+    }
+  }
+  await db.run('DELETE FROM members WHERE id = ?', memberId);
+}
+
+// Tasks (and their subtasks/activities) go with the project via ON DELETE CASCADE.
+export async function deleteProjectCascade(db, projectId) {
+  await db.run(
+    'UPDATE chat_groups SET project_id = NULL WHERE project_id = ?',
+    projectId
+  );
+  await db.run('DELETE FROM projects WHERE id = ?', projectId);
+}
+
+export async function clearWorkspaceData(db) {
+  await db.exec(
     'DELETE FROM chat_group_messages; DELETE FROM chat_groups; DELETE FROM activities; DELETE FROM subtasks; DELETE FROM tasks; DELETE FROM projects; DELETE FROM members; UPDATE users SET member_id = NULL;'
   );
 }
 
-export function getFullTaskById(db, taskId) {
-  const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+export async function getFullTaskById(db, taskId) {
+  const row = await db.get('SELECT * FROM tasks WHERE id = ?', taskId);
   if (!row) return null;
-  const subtasks = db
-    .prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC')
-    .all(taskId)
-    .map((s) => ({
-      ...s,
-      completed: Boolean(s.completed),
-      completed_at: s.completed_at || null,
-    }));
-  const activities = db
-    .prepare(
-      'SELECT * FROM activities WHERE task_id = ? ORDER BY created_at DESC'
+  const subtasks = (
+    await db.all(
+      'SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC',
+      taskId
     )
-    .all(taskId);
+  ).map((s) => ({
+    ...s,
+    completed: Boolean(s.completed),
+    completed_at: s.completed_at || null,
+  }));
+  const activities = await db.all(
+    'SELECT * FROM activities WHERE task_id = ? ORDER BY created_at DESC',
+    taskId
+  );
 
   return {
     ...row,
-    collaborator_ids: JSON.parse(row.collaborator_ids || '[]'),
-    tags: JSON.parse(row.tags || '[]'),
+    collaborator_ids: parseJsonArray(row.collaborator_ids),
+    tags: parseJsonArray(row.tags),
     subtasks,
     activities,
   };
 }
 
-export function getChatGroups(db, visibleProjectIds = 'all') {
-  const groups = db
-    .prepare('SELECT * FROM chat_groups ORDER BY created_at ASC')
-    .all();
-  const msgStats = db
-    .prepare(
-      'SELECT group_id, COUNT(*) as cnt, MAX(created_at) as last_at FROM chat_group_messages GROUP BY group_id'
-    )
-    .all();
+export async function getChatGroups(db, visibleProjectIds = 'all') {
+  const groups = await db.all(
+    'SELECT * FROM chat_groups ORDER BY created_at ASC'
+  );
+  const msgStats = await db.all(
+    'SELECT group_id, COUNT(*) as cnt, MAX(created_at) as last_at FROM chat_group_messages GROUP BY group_id'
+  );
   const statMap = new Map(msgStats.map((s) => [s.group_id, s]));
 
-  const latestMsgRows = db
-    .prepare(
-      `SELECT m.id, m.group_id, m.sender_member_id, m.sender_name, m.content, m.created_at
-       FROM chat_group_messages m
-       INNER JOIN (
-         SELECT group_id, MAX(created_at) AS max_at
-         FROM chat_group_messages
-         GROUP BY group_id
-       ) latest ON m.group_id = latest.group_id AND m.created_at = latest.max_at`
-    )
-    .all();
+  const latestMsgRows = await db.all(
+    `SELECT m.id, m.group_id, m.sender_member_id, m.sender_name, m.content, m.created_at
+     FROM chat_group_messages m
+     INNER JOIN (
+       SELECT group_id, MAX(created_at) AS max_at
+       FROM chat_group_messages
+       GROUP BY group_id
+     ) latest ON m.group_id = latest.group_id AND m.created_at = latest.max_at`
+  );
   const latestMsgMap = new Map(latestMsgRows.map((r) => [r.group_id, r]));
 
   return groups
@@ -410,7 +508,7 @@ export function getChatGroups(db, visibleProjectIds = 'all') {
       return {
         ...g,
         project_id: g.project_id || null,
-        member_ids: JSON.parse(g.member_ids || '[]'),
+        member_ids: parseJsonArray(g.member_ids),
         message_count: st ? Number(st.cnt) : 0,
         last_message_at: st ? st.last_at : null,
         last_message_id: lastMsg ? lastMsg.id : null,
@@ -423,14 +521,13 @@ export function getChatGroups(db, visibleProjectIds = 'all') {
     });
 }
 
-export function getBootstrapData(db, visibleProjectIds = 'all') {
-  const allProjects = db
-    .prepare('SELECT * FROM projects ORDER BY pinned DESC, created_at ASC')
-    .all()
-    .map((p) => ({
-      ...p,
-      pinned: Boolean(p.pinned),
-    }));
+export async function getBootstrapData(db, visibleProjectIds = 'all') {
+  const allProjects = (
+    await db.all('SELECT * FROM projects ORDER BY pinned DESC, created_at ASC')
+  ).map((p) => ({
+    ...p,
+    pinned: Boolean(p.pinned),
+  }));
   const projects =
     visibleProjectIds === 'all' || !Array.isArray(visibleProjectIds)
       ? allProjects
@@ -438,28 +535,29 @@ export function getBootstrapData(db, visibleProjectIds = 'all') {
 
   const allowedProjSet = new Set(projects.map((p) => p.id));
 
-  const members = db
-    .prepare('SELECT * FROM members ORDER BY pinned DESC, rowid ASC')
-    .all()
-    .map((m) => ({
-      ...m,
-      pinned: Boolean(m.pinned),
-    }));
-  const taskRows = db
-    .prepare('SELECT * FROM tasks ORDER BY position ASC, created_at DESC')
-    .all()
-    .filter((t) =>
-      visibleProjectIds === 'all' || !Array.isArray(visibleProjectIds)
-        ? true
-        : allowedProjSet.has(t.project_id)
-    );
+  // Insertion order: SQLite's rowid, Postgres' created_at column.
+  const memberOrder =
+    db.dialect === 'postgres' ? 'created_at ASC, id ASC' : 'rowid ASC';
+  const members = (
+    await db.all(`SELECT * FROM members ORDER BY pinned DESC, ${memberOrder}`)
+  ).map((m) => ({
+    ...m,
+    pinned: Boolean(m.pinned),
+  }));
+  const taskRows = (
+    await db.all('SELECT * FROM tasks ORDER BY position ASC, created_at DESC')
+  ).filter((t) =>
+    visibleProjectIds === 'all' || !Array.isArray(visibleProjectIds)
+      ? true
+      : allowedProjSet.has(t.project_id)
+  );
 
-  const allSubtasks = db
-    .prepare('SELECT * FROM subtasks ORDER BY created_at ASC')
-    .all();
-  const allActivities = db
-    .prepare('SELECT * FROM activities ORDER BY created_at DESC')
-    .all();
+  const allSubtasks = await db.all(
+    'SELECT * FROM subtasks ORDER BY created_at ASC'
+  );
+  const allActivities = await db.all(
+    'SELECT * FROM activities ORDER BY created_at DESC'
+  );
 
   const subtasksByTask = new Map();
   for (const s of allSubtasks) {
@@ -481,13 +579,13 @@ export function getBootstrapData(db, visibleProjectIds = 'all') {
 
   const tasks = taskRows.map((row) => ({
     ...row,
-    collaborator_ids: JSON.parse(row.collaborator_ids || '[]'),
-    tags: JSON.parse(row.tags || '[]'),
+    collaborator_ids: parseJsonArray(row.collaborator_ids),
+    tags: parseJsonArray(row.tags),
     subtasks: subtasksByTask.get(row.id) || [],
     activities: activitiesByTask.get(row.id) || [],
   }));
 
-  const chatGroups = getChatGroups(db, visibleProjectIds);
+  const chatGroups = await getChatGroups(db, visibleProjectIds);
 
   return { projects, members, tasks, chatGroups };
 }

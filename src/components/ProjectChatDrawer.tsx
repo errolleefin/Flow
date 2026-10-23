@@ -63,7 +63,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatGroupMessage[]>([]);
   const [input, setInput] = useState('');
-  const [selectedSenderMemId, setSelectedSenderMemId] = useState<string>('');
+  const [sending, setSending] = useState(false);
 
   // Group Form State (Create / Edit)
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -78,21 +78,16 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
   const activeGroup =
     chatGroups.find((g) => g.id === activeGroupId) || null;
 
+  // Honour the requested channel only when the drawer opens (or the request
+  // changes); re-applying it on every update undid the user's own selection.
   useEffect(() => {
-    if (!isOpen) return;
-    if (currentUser?.member_id) {
-      setSelectedSenderMemId(currentUser.member_id);
-    } else {
-      setSelectedSenderMemId('');
+    if (isOpen && initialGroupId) {
+      setActiveGroupId(initialGroupId);
     }
-  }, [isOpen, currentUser?.id, currentUser?.member_id]);
+  }, [isOpen, initialGroupId]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    if (initialGroupId) {
-      setActiveGroupId(initialGroupId);
-      return;
-    }
+    if (!isOpen || initialGroupId) return;
     if (
       activeGroupId &&
       chatGroups.some((g) => g.id === activeGroupId)
@@ -117,14 +112,19 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
       setMessages([]);
       return;
     }
+    // Ignore responses for a channel the user has already switched away from
+    let stale = false;
     apiClient
       .getChatGroupMessages(activeGroupId)
       .then((res) => {
-        setMessages(res.messages);
+        if (!stale) setMessages(res.messages);
       })
       .catch(() => {
-        setMessages([]);
+        if (!stale) setMessages([]);
       });
+    return () => {
+      stale = true;
+    };
   }, [isOpen, activeGroupId, activeGroup?.last_message_id]);
 
   useEffect(() => {
@@ -254,12 +254,11 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!activeGroup || !input.trim()) return;
+    if (!activeGroup || !input.trim() || sending) return;
+    setSending(true);
     try {
       const created = await apiClient.sendChatGroupMessage(activeGroup.id, {
         content: input.trim(),
-        sender_member_id: selectedSenderMemId || currentUser?.member_id || null,
-        sender_name: currentUser?.display_name || undefined,
       });
       setMessages((prev) => [...prev, created]);
       setInput('');
@@ -283,6 +282,8 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
           : tr('发送消息失败', 'Failed to send message'),
         'error'
       );
+    } finally {
+      setSending(false);
     }
   };
 
@@ -335,6 +336,14 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
       return <span key={idx}>{part}</span>;
     });
   };
+
+  // Mirrors the server rules: creators and member managers manage a channel,
+  // and only the sender or a member manager can delete a message.
+  const canManageMembers = Boolean(currentUser?.permissions.can_manage_members);
+  const canManageGroup = (grp: ChatGroup) =>
+    canManageMembers || grp.created_by === currentUser?.id;
+  const canDeleteMessage = (msg: ChatGroupMessage) =>
+    canManageMembers || msg.sender_user_id === currentUser?.id;
 
   const groupTasks = activeGroup?.project_id
     ? tasks.filter((t) => t.project_id === activeGroup.project_id)
@@ -555,36 +564,40 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                               <Bell className="w-3 h-3" />
                             )}
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditGroupForm(grp);
-                            }}
-                            className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
-                              isSelected
-                                ? 'hover:bg-white/20 text-white'
-                                : 'text-slate-400 hover:text-indigo-500'
-                            }`}
-                            title={tr('编辑群聊', 'Edit channel')}
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteGroup(grp);
-                            }}
-                            className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
-                              isSelected
-                                ? 'hover:bg-white/20 text-white'
-                                : 'text-slate-400 hover:text-rose-500'
-                            }`}
-                            title={tr('删除群聊', 'Delete channel')}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          {canManageGroup(grp) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEditGroupForm(grp);
+                                }}
+                                className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
+                                  isSelected
+                                    ? 'hover:bg-white/20 text-white'
+                                    : 'text-slate-400 hover:text-indigo-500'
+                                }`}
+                                title={tr('编辑群聊', 'Edit channel')}
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteGroup(grp);
+                                }}
+                                className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
+                                  isSelected
+                                    ? 'hover:bg-white/20 text-white'
+                                    : 'text-slate-400 hover:text-rose-500'
+                                }`}
+                                title={tr('删除群聊', 'Delete channel')}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -881,14 +894,16 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                                 )}
                               </span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMessage(msg.id)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity"
-                              title={tr('删除消息', 'Delete message')}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canDeleteMessage(msg) && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMessage(msg.id)}
+                                className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity"
+                                title={tr('删除消息', 'Delete message')}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                           <div className="mt-1 text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
                             {renderMessageContent(msg.content)}
@@ -952,25 +967,6 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                   onSubmit={handleSendMessage}
                   className="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0D1320] flex items-center gap-2"
                 >
-                  {members.length > 0 && (
-                    <select
-                      value={selectedSenderMemId}
-                      onChange={(e) => setSelectedSenderMemId(e.target.value)}
-                      className="px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs max-w-[140px]"
-                      title={tr('选择发言人员身份', 'Select sender identity')}
-                    >
-                      {!currentUser?.member_id && currentUser && (
-                        <option value="">
-                          {currentUser.display_name}
-                        </option>
-                      )}
-                      {members.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
                   <input
                     type="text"
                     value={input}
@@ -983,7 +979,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                   />
                   <button
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || sending}
                     style={{ backgroundColor: themeColor }}
                     className="px-4 py-2 rounded-xl hover:opacity-90 disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-opacity"
                   >

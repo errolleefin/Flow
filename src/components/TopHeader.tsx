@@ -34,6 +34,7 @@ interface TopHeaderProps {
   totalTaskCount: number;
   chatGroupCount?: number;
   canCreateTask?: boolean;
+  canManageWorkspace?: boolean;
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onUpdateFilter: (patch: Partial<FilterState>) => void;
@@ -58,6 +59,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   totalTaskCount,
   chatGroupCount = 0,
   canCreateTask = true,
+  canManageWorkspace = false,
   darkMode,
   onToggleDarkMode,
   onUpdateFilter,
@@ -132,36 +134,40 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <Download className="w-3.5 h-3.5" />
               <span>CSV</span>
             </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="px-2 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-xs inline-flex items-center gap-1"
-              title={tr('从 JSON 备份恢复数据', 'Restore from JSON backup')}
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>{tr('导入', 'Import')}</span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  onImportJSON(file);
-                  e.target.value = '';
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={onResetDemoData}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title={tr('清空当前工作区数据', 'Clear workspace data')}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
+            {canManageWorkspace && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-xs inline-flex items-center gap-1"
+                  title={tr('从 JSON 备份恢复数据', 'Restore from JSON backup')}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{tr('导入', 'Import')}</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      onImportJSON(file);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={onResetDemoData}
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title={tr('清空当前工作区数据', 'Clear workspace data')}
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
           </div>
 
           {/* Language Toggle (中文 / EN) */}

@@ -1,6 +1,50 @@
 import crypto from 'node:crypto';
-import { getTodayISO } from '../src/utils/dateUtils.ts';
-import { getFullTaskById } from './db.mjs';
+import {
+  getFullTaskById,
+  canSeeProject,
+  grantProjectVisibility,
+  nextTaskKey,
+  deleteMemberCascade,
+  deleteProjectCascade,
+} from './db.mjs';
+import {
+  TASK_STATUSES,
+  TASK_PRIORITIES,
+  isIsoDate,
+  isHexColor,
+  isNonNegativeNumber,
+} from './validation.mjs';
+
+const AI_CHAT_TIMEOUT_MS = 90 * 1000;
+const AI_MODELS_TIMEOUT_MS = 15 * 1000;
+
+const WELCOME_MESSAGE =
+  '你好！我是 **Flow AI 智能助理**。你可以先在右上角「接口配置」中永久保存你的 OpenAI 兼容 API（支持 OpenAI、DeepSeek、硅基流动、OpenRouter、阿里云百炼、本地 Ollama 等），然后直接用自然语言向我发送任务指令或粘贴会议纪要，我会自动为你提取 **任务名称、所属项目、截止日期、相关人员（主负责与协作人）、优先级与子任务清单** 并录入数据库！';
+
+// Each action needs the same permission as its REST counterpart.
+const ACTION_PERMISSIONS = {
+  create_project: 'can_create_project',
+  update_project: 'can_edit_project',
+  delete_project: 'can_delete_project',
+  create_member: 'can_manage_members',
+  update_member: 'can_manage_members',
+  delete_member: 'can_manage_members',
+  create_task: 'can_create_task',
+  update_task: 'can_edit_task',
+  delete_task: 'can_delete_task',
+};
+
+const ACTION_LABELS = {
+  create_project: '新建项目',
+  update_project: '编辑项目',
+  delete_project: '删除项目',
+  create_member: '新增成员',
+  update_member: '编辑成员',
+  delete_member: '删除成员',
+  create_task: '创建任务',
+  update_task: '更新任务',
+  delete_task: '删除任务',
+};
 
 const PROJECT_PALETTE = [
   '#6366f1',
@@ -21,6 +65,41 @@ const AVATAR_PALETTE = [
   'from-amber-500 to-orange-600',
   'from-fuchsia-500 to-violet-600',
 ];
+
+function serverTodayISO() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+// Prefer an exact (case-insensitive) name match; fall back to a partial match
+// only when it is unambiguous, so "王" never silently picks one of several 王s.
+function matchByName(items, name, isPartialMatch) {
+  const lower = name.toLowerCase();
+  const exact = items.find((item) => item.name.toLowerCase() === lower);
+  if (exact) return exact;
+  const partial = items.filter((item) => isPartialMatch(item, lower));
+  return partial.length === 1 ? partial[0] : null;
+}
+
+function escapeLike(value) {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (err?.name === 'TimeoutError') {
+      throw new Error('AI 接口请求超时，请稍后重试或检查接口配置');
+    }
+    throw err;
+  }
+}
 
 export function normalizeOpenAIEndpoint(baseUrl, type = 'chat') {
   const raw = String(baseUrl || 'https://api.openai.com/v1')
@@ -43,12 +122,12 @@ export function normalizeOpenAIEndpoint(baseUrl, type = 'chat') {
   return raw;
 }
 
-export function getAiSettings(db) {
-  return db.prepare('SELECT * FROM ai_settings WHERE id = 1').get();
+export async function getAiSettings(db) {
+  return db.get('SELECT * FROM ai_settings WHERE id = 1');
 }
 
-export function updateAiSettings(db, patch) {
-  const current = getAiSettings(db);
+export async function updateAiSettings(db, patch) {
+  const current = await getAiSettings(db);
   const nextBaseUrl =
     patch.base_url !== undefined
       ? String(patch.base_url).trim()
@@ -63,25 +142,48 @@ export function updateAiSettings(db, patch) {
       : current.temperature;
   const nowISO = new Date().toISOString();
 
-  db.prepare(
-    'UPDATE ai_settings SET base_url = ?, api_key = ?, model = ?, temperature = ?, updated_at = ? WHERE id = 1'
-  ).run(nextBaseUrl, nextApiKey, nextModel, nextTemp, nowISO);
+  await db.run(
+    'UPDATE ai_settings SET base_url = ?, api_key = ?, model = ?, temperature = ?, updated_at = ? WHERE id = 1',
+    nextBaseUrl,
+    nextApiKey,
+    nextModel,
+    nextTemp,
+    nowISO
+  );
 
   return getAiSettings(db);
 }
 
-export function getAiMessages(db) {
-  const rows = db
-    .prepare('SELECT * FROM ai_messages ORDER BY created_at ASC')
-    .all();
+// History is per account; legacy rows without an owner are shown to admins only.
+export async function getAiMessages(db, user) {
+  const rows = await db.all(
+    'SELECT * FROM ai_messages WHERE user_id = ? OR (user_id IS NULL AND ?) ORDER BY created_at ASC',
+    user.id,
+    user.role === 'admin'
+  );
+  if (rows.length === 0) {
+    return [
+      {
+        id: 'welcome',
+        role: 'assistant',
+        content: WELCOME_MESSAGE,
+        operations: [],
+        created_at: new Date().toISOString(),
+      },
+    ];
+  }
   return rows.map((r) => ({
     ...r,
     operations: JSON.parse(r.operations || '[]'),
   }));
 }
 
-export function clearAiMessages(db) {
-  db.exec('DELETE FROM ai_messages;');
+export async function clearAiMessages(db, user) {
+  await db.run(
+    'DELETE FROM ai_messages WHERE user_id = ? OR (user_id IS NULL AND ?)',
+    user.id,
+    user.role === 'admin'
+  );
   const nowISO = new Date().toISOString();
   const welcome = {
     id: crypto.randomUUID(),
@@ -91,29 +193,38 @@ export function clearAiMessages(db) {
     operations: [],
     created_at: nowISO,
   };
-  db.prepare(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(welcome.id, welcome.role, welcome.content, '[]', welcome.created_at);
+  await db.run(
+    'INSERT INTO ai_messages (id, user_id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    welcome.id,
+    user.id,
+    welcome.role,
+    welcome.content,
+    '[]',
+    welcome.created_at
+  );
   return [welcome];
 }
 
-export function buildSystemPrompt(db) {
-  const today = getTodayISO();
+// Only data the user may see is shown to the model. `today` is the user's
+// local date (the server may run in UTC).
+export async function buildSystemPrompt(db, user, today = serverTodayISO()) {
   const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   const [y, m, d] = today.split('-').map(Number);
   const weekdayLabel = weekDays[new Date(y, m - 1, d).getDay()];
 
-  const projects = db
-    .prepare('SELECT id, name, code, description FROM projects')
-    .all();
-  const members = db
-    .prepare('SELECT id, name, role, capacity_hours FROM members')
-    .all();
-  const tasks = db
-    .prepare(
-      'SELECT id, task_key, title, project_id, status, priority, due_date, assignee_id FROM tasks ORDER BY created_at DESC LIMIT 40'
+  const projects = (
+    await db.all('SELECT id, name, code, description FROM projects')
+  ).filter((p) => canSeeProject(user, p.id));
+  const members = await db.all(
+    'SELECT id, name, role, capacity_hours FROM members'
+  );
+  const tasks = (
+    await db.all(
+      'SELECT id, task_key, title, project_id, status, priority, due_date, assignee_id FROM tasks ORDER BY created_at DESC'
     )
-    .all();
+  )
+    .filter((t) => canSeeProject(user, t.project_id))
+    .slice(0, 40);
 
   const projMap = new Map(projects.map((p) => [p.id, p.name]));
   const memMap = new Map(members.map((mem) => [mem.id, mem.name]));
@@ -191,7 +302,8 @@ ${JSON.stringify(tasksSummary, null, 2)}
 {
   "type": "update_task",
   "task_key": "AI-101",
-  "title": "可选：修改后的标题",
+  "title": "可选：仅在没有 task_key 时用于按标题匹配任务",
+  "new_title": "可选：修改后的标题",
   "status": "可选：backlog | todo | in_progress | review | done",
   "priority": "可选：urgent | high | medium | low",
   "due_date": "可选：YYYY-MM-DD 或 null",
@@ -286,25 +398,35 @@ export function parseAiJsonResponse(rawContent) {
   };
 }
 
-function findOrCreateProjectByName(db, projectName, operations) {
-  const allProjects = db.prepare('SELECT * FROM projects').all();
-  if (!projectName || !String(projectName).trim()) {
-    return allProjects[0];
+// Matches only projects the user can see, and creates one only when the user
+// may create projects; returns null otherwise.
+async function findOrCreateProjectByName(db, projectName, operations, user) {
+  const allProjects = await db.all('SELECT * FROM projects');
+  const visibleProjects = allProjects.filter((p) => canSeeProject(user, p.id));
+  const hasName = Boolean(projectName && String(projectName).trim());
+  if (!hasName && visibleProjects.length > 0) {
+    return visibleProjects[0];
   }
-  const clean = String(projectName).trim();
-  const exact = allProjects.find(
-    (p) =>
-      p.name.toLowerCase() === clean.toLowerCase() ||
-      p.code.toLowerCase() === clean.toLowerCase()
-  );
-  if (exact) return exact;
-
-  const partial = allProjects.find(
-    (p) =>
-      p.name.toLowerCase().includes(clean.toLowerCase()) ||
-      clean.toLowerCase().includes(p.name.toLowerCase())
-  );
-  if (partial) return partial;
+  const clean = hasName ? String(projectName).trim() : '默认工作项目';
+  if (hasName) {
+    // Exact name, then exact code, then an unambiguous partial name match.
+    const match =
+      visibleProjects.find(
+        (p) => p.name.toLowerCase() === clean.toLowerCase()
+      ) ||
+      visibleProjects.find(
+        (p) => p.code.toLowerCase() === clean.toLowerCase()
+      ) ||
+      matchByName(
+        visibleProjects,
+        clean,
+        (p, lower) =>
+          p.name.toLowerCase().includes(lower) ||
+          lower.includes(p.name.toLowerCase())
+      );
+    if (match) return match;
+  }
+  if (!user.permissions.can_create_project) return null;
 
   // Auto-create project if not found
   const id = `proj-${crypto.randomUUID().slice(0, 8)}`;
@@ -316,11 +438,18 @@ function findOrCreateProjectByName(db, projectName, operations) {
   const color = PROJECT_PALETTE[allProjects.length % PROJECT_PALETTE.length];
   const nowISO = new Date().toISOString();
 
-  db.prepare(
-    'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, clean, code, color, `由 AI 助理自动创建的项目「${clean}」`, nowISO);
+  await db.run(
+    'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    id,
+    clean,
+    code,
+    color,
+    `由 AI 助理自动创建的项目「${clean}」`,
+    nowISO
+  );
+  await grantProjectVisibility(db, user, id);
 
-  const created = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  const created = await db.get('SELECT * FROM projects WHERE id = ?', id);
   operations.push({
     kind: 'project_created',
     id: created.id,
@@ -330,26 +459,37 @@ function findOrCreateProjectByName(db, projectName, operations) {
   return created;
 }
 
-function findOrCreateMemberByName(db, memberName, roleHint, operations) {
+async function findOrCreateMemberByName(
+  db,
+  memberName,
+  roleHint,
+  operations,
+  allowCreate
+) {
   if (!memberName || !String(memberName).trim()) return null;
   const clean = String(memberName).trim();
-  const allMembers = db.prepare('SELECT * FROM members').all();
-  const found = allMembers.find(
-    (m) =>
-      m.name.toLowerCase() === clean.toLowerCase() ||
-      m.name.toLowerCase().includes(clean.toLowerCase())
+  const allMembers = await db.all('SELECT * FROM members');
+  const found = matchByName(allMembers, clean, (m, lower) =>
+    m.name.toLowerCase().includes(lower)
   );
   if (found) return found;
+  if (!allowCreate) return null;
 
   const id = `mem-${crypto.randomUUID().slice(0, 8)}`;
   const avatarBg = AVATAR_PALETTE[allMembers.length % AVATAR_PALETTE.length];
   const role = roleHint || '项目协作成员';
 
-  db.prepare(
-    'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(id, clean, role, avatarBg, '', 40);
+  await db.run(
+    'INSERT INTO members (id, name, role, avatar_bg, email, capacity_hours) VALUES (?, ?, ?, ?, ?, ?)',
+    id,
+    clean,
+    role,
+    avatarBg,
+    '',
+    40
+  );
 
-  const created = db.prepare('SELECT * FROM members WHERE id = ?').get(id);
+  const created = await db.get('SELECT * FROM members WHERE id = ?', id);
   operations.push({
     kind: 'member_created',
     id: created.id,
@@ -359,29 +499,48 @@ function findOrCreateMemberByName(db, memberName, roleHint, operations) {
   return created;
 }
 
-export function executeAiActions(db, actions) {
+// Applies model-proposed actions with the requesting user's permissions and
+// project visibility; anything not allowed is reported in `skipped`.
+export async function executeAiActions(db, actions, user) {
   const operations = [];
-  if (!Array.isArray(actions)) return operations;
+  const skipped = [];
+  if (!Array.isArray(actions)) return { operations, skipped };
+  const canCreateMembers = Boolean(user.permissions.can_manage_members);
+  const skip = (act, reason) => {
+    const target = act.title || act.name || act.task_key;
+    skipped.push(
+      `${ACTION_LABELS[act.type]}${target ? `「${target}」` : ''}：${reason}`
+    );
+  };
 
   for (const act of actions) {
     if (!act || typeof act !== 'object') continue;
     const type = act.type;
     const nowISO = new Date().toISOString();
+    if (!ACTION_PERMISSIONS[type]) continue;
+    if (!user.permissions[ACTION_PERMISSIONS[type]]) {
+      skip(act, '当前账号无此操作权限');
+      continue;
+    }
 
     if (type === 'create_project' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (!existing) {
-        const count = db.prepare('SELECT COUNT(*) as cnt FROM projects').get().cnt;
+        const count = Number(
+          (await db.get('SELECT COUNT(*) as cnt FROM projects')).cnt
+        );
         const id = `proj-${crypto.randomUUID().slice(0, 8)}`;
         const code =
           (act.code && String(act.code).trim().toUpperCase()) ||
           String(act.name).trim().slice(0, 3).toUpperCase();
-        const color = act.color || PROJECT_PALETTE[count % PROJECT_PALETTE.length];
-        db.prepare(
-          'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(
+        const color = isHexColor(act.color)
+          ? act.color
+          : PROJECT_PALETTE[count % PROJECT_PALETTE.length];
+        await db.run(
+          'INSERT INTO projects (id, name, code, color, description, created_at) VALUES (?, ?, ?, ?, ?, ?)',
           id,
           String(act.name).trim(),
           code,
@@ -389,6 +548,7 @@ export function executeAiActions(db, actions) {
           act.description || '',
           nowISO
         );
+        await grantProjectVisibility(db, user, id);
         operations.push({
           kind: 'project_created',
           id,
@@ -397,58 +557,69 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'create_member' && act.name) {
-      findOrCreateMemberByName(db, act.name, act.role, operations);
+      await findOrCreateMemberByName(db, act.name, act.role, operations, true);
     } else if (type === 'create_task' && act.title) {
-      const proj = findOrCreateProjectByName(
+      const proj = await findOrCreateProjectByName(
         db,
         act.project_name || act.project,
-        operations
+        operations,
+        user
       );
+      if (!proj) {
+        skip(act, '没有可用的项目');
+        continue;
+      }
       const assignee = act.assignee_name
-        ? findOrCreateMemberByName(db, act.assignee_name, null, operations)
+        ? await findOrCreateMemberByName(
+            db,
+            act.assignee_name,
+            null,
+            operations,
+            canCreateMembers
+          )
         : null;
 
       const collabIds = [];
       if (Array.isArray(act.collaborator_names)) {
         for (const cName of act.collaborator_names) {
-          const mem = findOrCreateMemberByName(db, cName, null, operations);
+          const mem = await findOrCreateMemberByName(
+            db,
+            cName,
+            null,
+            operations,
+            canCreateMembers
+          );
           if (mem && !collabIds.includes(mem.id)) {
             collabIds.push(mem.id);
           }
         }
       }
 
-      const existingCount = db
-        .prepare('SELECT COUNT(*) as cnt FROM tasks WHERE project_id = ?')
-        .get(proj.id);
-      const nextNum = 101 + (existingCount?.cnt || 0) + operations.length;
-      const taskKey = `${proj.code}-${nextNum}`;
-      const maxPosRow = db.prepare('SELECT MAX(position) as maxPos FROM tasks').get();
-      const position = (maxPosRow?.maxPos || 0) + 1;
+      const taskKey = await nextTaskKey(db, proj.code);
+      const maxPosRow = await db.get(
+        'SELECT MAX(position) as max_pos FROM tasks'
+      );
+      const position = (Number(maxPosRow?.max_pos) || 0) + 1;
       const taskId = `task-${crypto.randomUUID().slice(0, 8)}`;
 
-      const status = ['backlog', 'todo', 'in_progress', 'review', 'done'].includes(
-        act.status
-      )
-        ? act.status
-        : 'todo';
-      const priority = ['urgent', 'high', 'medium', 'low'].includes(act.priority)
+      const status = TASK_STATUSES.includes(act.status) ? act.status : 'todo';
+      const priority = TASK_PRIORITIES.includes(act.priority)
         ? act.priority
         : 'medium';
-      const dueDate =
-        act.due_date && String(act.due_date).trim() !== 'null'
-          ? String(act.due_date).trim()
-          : null;
+      const dueDate = isIsoDate(String(act.due_date ?? '').trim())
+        ? String(act.due_date).trim()
+        : null;
       const tags = Array.isArray(act.tags) ? act.tags.map(String) : ['AI录入'];
-      const estimateHours = Number(act.estimate_hours) || 4;
+      const estimateHours = isNonNegativeNumber(act.estimate_hours)
+        ? Number(act.estimate_hours) || 4
+        : 4;
 
-      db.prepare(`
-        INSERT INTO tasks (
+      await db.run(
+        `INSERT INTO tasks (
           id, task_key, title, description, project_id, status, priority,
           due_date, assignee_id, collaborator_ids, tags, estimate_hours,
           logged_minutes, position, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-      `).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
         taskId,
         taskKey,
         String(act.title).trim(),
@@ -466,12 +637,12 @@ export function executeAiActions(db, actions) {
         nowISO
       );
 
-      db.prepare(
-        'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(
+      await db.run(
+        'INSERT INTO activities (id, task_id, member_id, actor_name, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         crypto.randomUUID(),
         taskId,
-        assignee ? assignee.id : null,
+        user.member_id || null,
+        user.display_name,
         'system',
         `由 AI 智能助理整理录入任务 [${taskKey}]`,
         nowISO
@@ -479,12 +650,15 @@ export function executeAiActions(db, actions) {
 
       let subCount = 0;
       if (Array.isArray(act.subtasks)) {
-        const insSub = db.prepare(
-          'INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?, ?, ?, 0, ?)'
-        );
         for (const subTitle of act.subtasks) {
           if (subTitle && String(subTitle).trim()) {
-            insSub.run(crypto.randomUUID(), taskId, String(subTitle).trim(), nowISO);
+            await db.run(
+              'INSERT INTO subtasks (id, task_id, title, completed, created_at) VALUES (?, ?, ?, FALSE, ?)',
+              crypto.randomUUID(),
+              taskId,
+              String(subTitle).trim(),
+              nowISO
+            );
             subCount++;
           }
         }
@@ -504,139 +678,197 @@ export function executeAiActions(db, actions) {
     } else if (type === 'update_task') {
       let existing = null;
       if (act.task_key) {
-        existing = db
-          .prepare('SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)')
-          .get(String(act.task_key).trim());
+        existing = await db.get(
+          'SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)',
+          String(act.task_key).trim()
+        );
       }
       if (!existing && act.title) {
-        existing = db
-          .prepare('SELECT * FROM tasks WHERE title LIKE ?')
-          .get(`%${String(act.title).trim()}%`);
+        existing = await db.get(
+          "SELECT * FROM tasks WHERE LOWER(title) LIKE ? ESCAPE '\\'",
+          `%${escapeLike(String(act.title).trim().toLowerCase())}%`
+        );
       }
-      if (existing) {
-        const nextTitle = act.new_title || existing.title;
-        const nextStatus = act.status || existing.status;
-        const nextPriority = act.priority || existing.priority;
-        const nextDueDate =
-          act.due_date !== undefined ? act.due_date : existing.due_date;
-        const nextProject = act.project_name
-          ? findOrCreateProjectByName(db, act.project_name, operations)
-          : null;
-        const nextAssignee = act.assignee_name
-          ? findOrCreateMemberByName(db, act.assignee_name, null, operations)
-          : null;
+      if (existing && !canSeeProject(user, existing.project_id)) {
+        existing = null;
+      }
+      if (!existing) {
+        skip(act, '未找到该任务');
+        continue;
+      }
+      // Fields the model got wrong are ignored rather than written as-is.
+      const nextTitle =
+        act.new_title && String(act.new_title).trim()
+          ? String(act.new_title).trim()
+          : existing.title;
+      const nextStatus = TASK_STATUSES.includes(act.status)
+        ? act.status
+        : existing.status;
+      const nextPriority = TASK_PRIORITIES.includes(act.priority)
+        ? act.priority
+        : existing.priority;
+      let nextDueDate = existing.due_date;
+      if (act.due_date !== undefined) {
+        const rawDue = String(act.due_date ?? '').trim();
+        if (rawDue === '' || rawDue === 'null') nextDueDate = null;
+        else if (isIsoDate(rawDue)) nextDueDate = rawDue;
+      }
+      const nextEstimate =
+        isNonNegativeNumber(act.estimate_hours) && Number(act.estimate_hours) > 0
+          ? Number(act.estimate_hours)
+          : existing.estimate_hours;
+      const nextProject = act.project_name
+        ? await findOrCreateProjectByName(
+            db,
+            act.project_name,
+            operations,
+            user
+          )
+        : null;
+      if (act.project_name && !nextProject) {
+        skip(act, '没有可用的目标项目');
+        continue;
+      }
+      const nextAssignee = act.assignee_name
+        ? await findOrCreateMemberByName(
+            db,
+            act.assignee_name,
+            null,
+            operations,
+            canCreateMembers
+          )
+        : null;
 
-        let nextCollabJson = existing.collaborator_ids;
-        if (Array.isArray(act.collaborator_names)) {
-          const ids = [];
-          for (const cn of act.collaborator_names) {
-            const m = findOrCreateMemberByName(db, cn, null, operations);
-            if (m) ids.push(m.id);
-          }
-          nextCollabJson = JSON.stringify(ids);
+      let nextCollabJson = existing.collaborator_ids;
+      if (Array.isArray(act.collaborator_names)) {
+        const ids = [];
+        for (const cn of act.collaborator_names) {
+          const m = await findOrCreateMemberByName(
+            db,
+            cn,
+            null,
+            operations,
+            canCreateMembers
+          );
+          if (m) ids.push(m.id);
         }
-
-        db.prepare(`
-          UPDATE tasks SET
-            title = ?,
-            status = ?,
-            priority = ?,
-            due_date = ?,
-            project_id = ?,
-            assignee_id = ?,
-            collaborator_ids = ?,
-            updated_at = ?
-          WHERE id = ?
-        `).run(
-          nextTitle,
-          nextStatus,
-          nextPriority,
-          nextDueDate,
-          nextProject ? nextProject.id : existing.project_id,
-          nextAssignee ? nextAssignee.id : existing.assignee_id,
-          nextCollabJson,
-          nowISO,
-          existing.id
-        );
-
-        db.prepare(
-          'INSERT INTO activities (id, task_id, member_id, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(
-          crypto.randomUUID(),
-          existing.id,
-          existing.assignee_id,
-          'system',
-          `AI 助理更新了任务属性 (状态: ${nextStatus}, 截止: ${nextDueDate || '未排期'})`,
-          nowISO
-        );
-
-        const updatedFull = getFullTaskById(db, existing.id);
-        operations.push({
-          kind: 'task_updated',
-          id: existing.id,
-          task_key: existing.task_key,
-          title: updatedFull.title,
-          due_date: updatedFull.due_date || '未排期',
-          summary: `更新任务 [${existing.task_key}] ${updatedFull.title} -> 状态: ${updatedFull.status}`,
-        });
+        nextCollabJson = JSON.stringify(ids);
       }
+
+      await db.run(
+        `UPDATE tasks SET
+          title = ?,
+          status = ?,
+          priority = ?,
+          due_date = ?,
+          project_id = ?,
+          assignee_id = ?,
+          collaborator_ids = ?,
+          estimate_hours = ?,
+          updated_at = ?
+        WHERE id = ?`,
+        nextTitle,
+        nextStatus,
+        nextPriority,
+        nextDueDate,
+        nextProject ? nextProject.id : existing.project_id,
+        nextAssignee ? nextAssignee.id : existing.assignee_id,
+        nextCollabJson,
+        nextEstimate,
+        nowISO,
+        existing.id
+      );
+
+      await db.run(
+        'INSERT INTO activities (id, task_id, member_id, actor_name, type, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        crypto.randomUUID(),
+        existing.id,
+        user.member_id || null,
+        user.display_name,
+        'system',
+        `AI 助理更新了任务属性 (状态: ${nextStatus}, 截止: ${nextDueDate || '未排期'})`,
+        nowISO
+      );
+
+      const updatedFull = await getFullTaskById(db, existing.id);
+      operations.push({
+        kind: 'task_updated',
+        id: existing.id,
+        task_key: existing.task_key,
+        title: updatedFull.title,
+        due_date: updatedFull.due_date || '未排期',
+        summary: `更新任务 [${existing.task_key}] ${updatedFull.title} -> 状态: ${updatedFull.status}`,
+      });
     } else if (type === 'delete_task' && act.task_key) {
-      const existing = db
-        .prepare('SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)')
-        .get(String(act.task_key).trim());
-      if (existing) {
-        db.prepare('DELETE FROM tasks WHERE id = ?').run(existing.id);
-        operations.push({
-          kind: 'task_deleted',
-          id: existing.id,
-          task_key: existing.task_key,
-          title: existing.title,
-          summary: `删除任务 [${existing.task_key}] ${existing.title}`,
-        });
+      const existing = await db.get(
+        'SELECT * FROM tasks WHERE UPPER(task_key) = UPPER(?)',
+        String(act.task_key).trim()
+      );
+      if (!existing || !canSeeProject(user, existing.project_id)) {
+        skip(act, '未找到该任务');
+        continue;
       }
+      await db.run('DELETE FROM tasks WHERE id = ?', existing.id);
+      operations.push({
+        kind: 'task_deleted',
+        id: existing.id,
+        task_key: existing.task_key,
+        title: existing.title,
+        summary: `删除任务 [${existing.task_key}] ${existing.title}`,
+      });
     } else if (type === 'update_project' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
-      if (existing) {
-        const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
-        const nextCode = act.code ? String(act.code).trim().toUpperCase() : existing.code;
-        const nextDesc = act.description !== undefined ? String(act.description) : existing.description;
-        db.prepare('UPDATE projects SET name = ?, code = ?, description = ? WHERE id = ?').run(
-          nextName,
-          nextCode,
-          nextDesc,
-          existing.id
-        );
-        operations.push({
-          kind: 'project_created',
-          id: existing.id,
-          title: nextName,
-          summary: `已更新项目 [${nextCode}] ${nextName}`,
-        });
+      const existing = await db.get(
+        'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
+      if (!existing || !canSeeProject(user, existing.id)) {
+        skip(act, '未找到该项目');
+        continue;
       }
+      const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
+      const nextCode = act.code ? String(act.code).trim().toUpperCase() : existing.code;
+      const nextDesc = act.description !== undefined ? String(act.description) : existing.description;
+      await db.run(
+        'UPDATE projects SET name = ?, code = ?, description = ? WHERE id = ?',
+        nextName,
+        nextCode,
+        nextDesc,
+        existing.id
+      );
+      operations.push({
+        kind: 'project_created',
+        id: existing.id,
+        title: nextName,
+        summary: `已更新项目 [${nextCode}] ${nextName}`,
+      });
     } else if (type === 'delete_project' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM projects WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
-      if (existing) {
-        db.prepare('DELETE FROM projects WHERE id = ?').run(existing.id);
-        operations.push({
-          kind: 'task_deleted',
-          id: existing.id,
-          title: existing.name,
-          summary: `已删除项目「${existing.name}」`,
-        });
+      const existing = await db.get(
+        'SELECT * FROM projects WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
+      if (!existing || !canSeeProject(user, existing.id)) {
+        skip(act, '未找到该项目');
+        continue;
       }
+      await deleteProjectCascade(db, existing.id);
+      operations.push({
+        kind: 'task_deleted',
+        id: existing.id,
+        title: existing.name,
+        summary: `已删除项目「${existing.name}」`,
+      });
     } else if (type === 'update_member' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM members WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM members WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (existing) {
         const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
         const nextRole = act.role ? String(act.role).trim() : existing.role;
-        const nextCap = act.capacity_hours ? Number(act.capacity_hours) : existing.capacity_hours;
-        db.prepare('UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?').run(
+        const nextCap =
+          Math.round(Number(act.capacity_hours)) || existing.capacity_hours;
+        await db.run(
+          'UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?',
           nextName,
           nextRole,
           nextCap,
@@ -650,20 +882,12 @@ export function executeAiActions(db, actions) {
         });
       }
     } else if (type === 'delete_member' && act.name) {
-      const existing = db
-        .prepare('SELECT * FROM members WHERE LOWER(name) = LOWER(?)')
-        .get(String(act.name).trim());
+      const existing = await db.get(
+        'SELECT * FROM members WHERE LOWER(name) = LOWER(?)',
+        String(act.name).trim()
+      );
       if (existing) {
-        db.prepare('UPDATE tasks SET assignee_id = NULL WHERE assignee_id = ?').run(existing.id);
-        const allTasks = db.prepare('SELECT id, collaborator_ids FROM tasks').all();
-        const upd = db.prepare('UPDATE tasks SET collaborator_ids = ? WHERE id = ?');
-        for (const t of allTasks) {
-          const list = JSON.parse(t.collaborator_ids || '[]');
-          if (Array.isArray(list) && list.includes(existing.id)) {
-            upd.run(JSON.stringify(list.filter((id) => id !== existing.id)), t.id);
-          }
-        }
-        db.prepare('DELETE FROM members WHERE id = ?').run(existing.id);
+        await deleteMemberCascade(db, existing.id);
         operations.push({
           kind: 'task_deleted',
           id: existing.id,
@@ -674,27 +898,33 @@ export function executeAiActions(db, actions) {
     }
   }
 
-  return operations;
+  return { operations, skipped };
 }
 
-export async function processAiChat(db, userMessage) {
-  const settings = getAiSettings(db);
+export async function processAiChat(db, userMessage, user, clientToday) {
+  const settings = await getAiSettings(db);
   if (!settings.base_url || !settings.model) {
     throw new Error('请先在 AI 助理配置中填写 Base URL 与模型名称 (Model)');
   }
 
   const nowISO = new Date().toISOString();
   const userMsgId = crypto.randomUUID();
-  db.prepare(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(userMsgId, 'user', String(userMessage).trim(), '[]', nowISO);
+  await db.run(
+    'INSERT INTO ai_messages (id, user_id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    userMsgId,
+    user.id,
+    'user',
+    String(userMessage).trim(),
+    '[]',
+    nowISO
+  );
 
-  const recentMessages = db
-    .prepare(
-      'SELECT role, content FROM ai_messages ORDER BY created_at DESC LIMIT 8'
+  const recentMessages = (
+    await db.all(
+      'SELECT role, content FROM ai_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT 8',
+      user.id
     )
-    .all()
-    .reverse();
+  ).reverse();
 
   const endpoint = normalizeOpenAIEndpoint(settings.base_url, 'chat');
   const headers = {
@@ -705,22 +935,33 @@ export async function processAiChat(db, userMessage) {
   }
 
   const apiMessages = [
-    { role: 'system', content: buildSystemPrompt(db) },
+    {
+      role: 'system',
+      content: await buildSystemPrompt(
+        db,
+        user,
+        isIsoDate(clientToday) ? clientToday : serverTodayISO()
+      ),
+    },
     ...recentMessages.map((m) => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: m.content,
     })),
   ];
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: settings.model,
-      messages: apiMessages,
-      temperature: Number(settings.temperature ?? 0.2),
-    }),
-  });
+  const response = await fetchWithTimeout(
+    endpoint,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: settings.model,
+        messages: apiMessages,
+        temperature: Number(settings.temperature ?? 0.2),
+      }),
+    },
+    AI_CHAT_TIMEOUT_MS
+  );
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
@@ -732,20 +973,28 @@ export async function processAiChat(db, userMessage) {
   const data = await response.json();
   const rawContent = data?.choices?.[0]?.message?.content || '';
   const parsed = parseAiJsonResponse(rawContent);
-  const operations = executeAiActions(db, parsed.actions);
+  const { operations, skipped } = await db.transaction((tx) =>
+    executeAiActions(tx, parsed.actions, user)
+  );
+  const reply =
+    skipped.length > 0
+      ? `${parsed.reply}\n\n⚠️ 以下操作未执行：\n${skipped
+          .map((item) => `- ${item}`)
+          .join('\n')}`
+      : parsed.reply;
 
   const assistantMsg = {
     id: crypto.randomUUID(),
     role: 'assistant',
-    content: parsed.reply,
+    content: reply,
     operations,
     created_at: new Date().toISOString(),
   };
 
-  db.prepare(
-    'INSERT INTO ai_messages (id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(
+  await db.run(
+    'INSERT INTO ai_messages (id, user_id, role, content, operations, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     assistantMsg.id,
+    user.id,
     assistantMsg.role,
     assistantMsg.content,
     JSON.stringify(operations),
@@ -764,10 +1013,11 @@ export async function fetchOpenAIModels(baseUrl, apiKey) {
     headers['Authorization'] = `Bearer ${String(apiKey).trim()}`;
   }
 
-  const res = await fetch(endpoint, {
-    method: 'GET',
-    headers,
-  });
+  const res = await fetchWithTimeout(
+    endpoint,
+    { method: 'GET', headers },
+    AI_MODELS_TIMEOUT_MS
+  );
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');

@@ -29,6 +29,7 @@ import type {
 
 interface AIAssistantDrawerProps {
   isOpen: boolean;
+  isAdmin: boolean;
   onClose: () => void;
   onSyncBootstrap: (data: BootstrapPayload) => void;
   onSelectTaskById: (taskId: string) => void;
@@ -103,6 +104,7 @@ const QUICK_PROMPTS = [
 
 export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
   isOpen,
+  isAdmin,
   onClose,
   onSyncBootstrap,
   onSelectTaskById,
@@ -116,6 +118,8 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
     model: 'gpt-4o-mini',
     temperature: 0.2,
   });
+  // The server never returns the saved key; this holds a newly typed one.
+  const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [testingModels, setTestingModels] = useState(false);
@@ -131,6 +135,7 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
     Promise.all([apiClient.getAiSettings(), apiClient.getAiMessages()])
       .then(([cfg, msgRes]) => {
         setSettings(cfg);
+        setApiKeyDraft('');
         setMessages(msgRes.messages);
       })
       .catch((err) => {
@@ -151,12 +156,22 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
 
   if (!isOpen) return null;
 
+  const hasEndpointKey =
+    Boolean(settings.has_api_key) || settings.base_url.includes('11434');
+
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setSavingSettings(true);
-      const updated = await apiClient.updateAiSettings(settings);
+      const updated = await apiClient.updateAiSettings({
+        base_url: settings.base_url,
+        model: settings.model,
+        temperature: settings.temperature,
+        // An empty field keeps the saved key.
+        ...(apiKeyDraft.trim() ? { api_key: apiKeyDraft.trim() } : {}),
+      });
       setSettings(updated);
+      setApiKeyDraft('');
       onShowToast(
         tr(
           'AI 接口配置已永久保存至本地 SQLite 数据库',
@@ -176,12 +191,28 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
     }
   };
 
+  const handleClearApiKey = async () => {
+    try {
+      const updated = await apiClient.updateAiSettings({ api_key: '' });
+      setSettings(updated);
+      setApiKeyDraft('');
+      onShowToast(tr('已清除保存的 API Key', 'Saved API key cleared'));
+    } catch (err) {
+      onShowToast(
+        err instanceof Error
+          ? err.message
+          : tr('清除密钥失败', 'Failed to clear API key'),
+        'error'
+      );
+    }
+  };
+
   const handleTestAndFetchModels = async () => {
     try {
       setTestingModels(true);
       const res = await apiClient.fetchAiModels(
         settings.base_url,
-        settings.api_key
+        apiKeyDraft.trim()
       );
       setAvailableModels(res.models);
       if (res.models.length > 0 && !res.models.includes(settings.model)) {
@@ -366,22 +397,24 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() =>
-                setActiveTab(activeTab === 'chat' ? 'settings' : 'chat')
-              }
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                activeTab === 'settings'
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-indigo-500'
-              }`}
-            >
-              <Settings2 className="w-3.5 h-3.5" />
-              {activeTab === 'settings'
-                ? tr('返回对话', 'Back to Chat')
-                : tr('接口配置', 'API Settings')}
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveTab(activeTab === 'chat' ? 'settings' : 'chat')
+                }
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                  activeTab === 'settings'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-indigo-500'
+                }`}
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                {activeTab === 'settings'
+                  ? tr('返回对话', 'Back to Chat')
+                  : tr('接口配置', 'API Settings')}
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -393,7 +426,7 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
         </div>
 
         {/* Settings Tab (Permanent SQLite Persistence) */}
-        {activeTab === 'settings' ? (
+        {isAdmin && activeTab === 'settings' ? (
           <form
             onSubmit={handleSaveSettings}
             className="flex-1 overflow-y-auto p-6 space-y-5 text-xs"
@@ -479,14 +512,16 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
                 <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type={showApiKey ? 'text' : 'password'}
-                  value={settings.api_key}
-                  onChange={(e) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      api_key: e.target.value,
-                    }))
+                  value={apiKeyDraft}
+                  onChange={(e) => setApiKeyDraft(e.target.value)}
+                  placeholder={
+                    settings.has_api_key
+                      ? tr(
+                          `已保存 ${settings.api_key_masked}（留空则保持不变）`,
+                          `Saved ${settings.api_key_masked} (leave blank to keep)`
+                        )
+                      : 'sk-...'
                   }
-                  placeholder="sk-..."
                   className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-mono text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 />
                 <button
@@ -501,6 +536,15 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
                   )}
                 </button>
               </div>
+              {settings.has_api_key && (
+                <button
+                  type="button"
+                  onClick={handleClearApiKey}
+                  className="mt-1 text-[11px] text-rose-500 hover:underline"
+                >
+                  {tr('清除已保存的 API Key', 'Clear saved API key')}
+                </button>
+              )}
             </div>
 
             {/* Model Name + Fetch Models Button */}
@@ -595,7 +639,7 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
               <div className="flex items-center gap-2 truncate">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    settings.api_key || settings.base_url.includes('11434')
+                    hasEndpointKey
                       ? 'bg-emerald-500'
                       : 'bg-amber-500 animate-pulse'
                   }`}
@@ -606,7 +650,7 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {!settings.api_key && !settings.base_url.includes('11434') && (
+                {isAdmin && !hasEndpointKey && (
                   <button
                     type="button"
                     onClick={() => setActiveTab('settings')}
@@ -709,6 +753,8 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
+                  // Enter that confirms an IME candidate (e.g. pinyin) must not send.
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     handleSend();
