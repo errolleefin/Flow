@@ -18,7 +18,8 @@
   <img src="https://img.shields.io/badge/SQLite-Native%20node%3Asqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Vercel%20%2B%20Supabase-Supported-000000?logo=vercel&logoColor=white" alt="Vercel" />
-  <img src="https://img.shields.io/badge/Release-v0.2-6366F1" alt="Release v0.2" />
+  <img src="https://img.shields.io/badge/PostgreSQL%20%2F%20Supabase-pg%208.23%2B-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Release-v0.3-6366F1" alt="Release v0.3" />
   <img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License GPL-3.0" />
 </p>
 
@@ -40,6 +41,8 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 5. **Global Analytics & Insights Dashboard**: Monitor overall delivery rate, overdue alerts, logged focus hours, project health comparisons, team workload rankings, and high-priority deadline radars.
 
 ### 3. Account Authentication & 5-Tier RBAC System
+- **Server-Side Authentication & Strict RBAC Enforcement**: Every `/api` route strictly validates active sessions and verifies role-based permissions on the server, preventing privilege escalation and horizontal authorization bypass. Inaccessible resources return 404 to avoid information disclosure.
+- **Session Security & Brute-Force Rate Limiting**: Sessions expire after 30 days by default (customizable via `FLOW_SESSION_TTL_DAYS`). Password changes automatically revoke all other active sessions, and failed login attempts are rate-limited.
 - **First-Time Super Admin Setup**: When deployed with an empty user table, Flow automatically launches the **First-Time Super Admin Setup** wizard to initialize the primary `admin` account and optionally create a bound team member profile.
 - **Account Management Menu**: Super Admins can access the **Account Management** modal from the bottom of the left sidebar to create, edit, and delete user accounts, reset passwords, and configure permissions.
 - **5-Tier Organization Role Hierarchy & Granular Overrides**: Includes 5 built-in role presets with customizable per-account permission toggles and **project visibility scoping (`All Projects` vs. `Selected Projects Only`)**:
@@ -68,6 +71,13 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 - **Rich Task Detail Drawer**: Break down tasks into subtasks with progress tracking, assign multiple collaborators, manage custom tags, post team comments, and review automated activity audit logs.
 - **Built-in Pomodoro Focus Timer**: Floating 25-minute focus timer that automatically logs completed focus sessions into a task's actual time spent.
 - **Dual Theme, Bilingual UI & Full Data Sovereignty**: Switch seamlessly between Crisp Light and Linear Dark themes, toggle the entire workspace UI between **Simplified Chinese (`中文`) and English (`EN`)** with one click, export/import full workspace backups via JSON, or export task reports to CSV.
+
+
+### 6. Cloud-Native Dual Storage Engines & Data Integrity (SQLite + PostgreSQL / Supabase)
+- **Seamless Dual Engine Switching**: Runs out-of-the-box on zero-dependency Node.js native SQLite (`node:sqlite`). Simply setting `DATABASE_URL` seamlessly switches the entire storage backend to PostgreSQL / Supabase.
+- **Automated Idempotent Migrations & RLS Hardening**: Idempotently creates 11 relational tables and applies column migrations on first connection. Every table enables Row Level Security (RLS) to prevent credential or data exposure via the Supabase Data API.
+- **Atomic Transactions & Concurrency Safety**: JSON workspace imports are pre-validated and executed atomically within a database transaction. Unique task keys use PostgreSQL advisory locks to eliminate race conditions under concurrent creation.
+- **Security Audit & Key Masking**: AI API keys are stored safely and masked in responses to prevent SSRF and leakage. Production dependencies have 0 CVE vulnerabilities with an in-depth security audit report [`20261022_code-review.md`](./20261022_code-review.md).
 
 ---
 

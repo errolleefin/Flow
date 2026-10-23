@@ -18,7 +18,8 @@
   <img src="https://img.shields.io/badge/SQLite-Native%20node%3Asqlite-003B57?logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Vercel%20%2B%20Supabase-Supported-000000?logo=vercel&logoColor=white" alt="Vercel" />
-  <img src="https://img.shields.io/badge/Release-v0.2-6366F1" alt="Release v0.2" />
+  <img src="https://img.shields.io/badge/PostgreSQL%20%2F%20Supabase-pg%208.23%2B-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Release-v0.3-6366F1" alt="Release v0.3" />
   <img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License GPL-3.0" />
 </p>
 
@@ -40,6 +41,8 @@
 5. **全局效能仪表盘（Analytics & Insights）**：汇总全局交付率、死线预警、专注工时投入、项目健康度对比图、团队负载排行与高优死线雷达表。
 
 ### 3. 账户登录与 5 级 RBAC 权限管理体系
+- **服务端鉴权与角色权限统一强制校验**：服务端所有 `/api` 接口统一实施会话登录校验与路由级 RBAC 权限鉴权，杜绝仅依赖前端控制的安全隐患；对不可见资源返回 404 防止信息探测，防止越权提权。
+- **会话安全与防爆破机制**：会话默认 30 天有效（支持 `FLOW_SESSION_TTL_DAYS` 自定义），修改密码自动吊销其他已登录会话，登录失败自动实施 IP 限速。
 - **首次部署超级管理员初始化**：初次启动检测到数据库尚无账户时，自动打开**「首次部署 · 初始化超级管理员」**设置向导，创建首个超级管理员（`admin`）账号并可选同步生成同名团队人员档案。
 - **管理员账号管理菜单**：超级管理员登录系统后，可通过左侧导航栏底部的**「账号管理（Account Management）」**按钮新建、编辑或删除团队账号、重置密码并分配权限。
 - **5 级组织角色权限模型与细粒度自定义**：支持预设五级角色，并支持按单个账号覆盖任意权限开关及限定**可视项目范围（全部项目可视 / 仅勾选的指定项目可视）**：
@@ -68,6 +71,13 @@
 - **富任务详情抽屉**：支持子任务拆解与进度条、多选协同相关人员、自定义标签、团队评论与系统自动审计日志。
 - **专注番茄钟（Pomodoro Timer）**：25 分钟悬浮倒计时，结算后自动累加至任务实际投入时长。
 - **双主题、中英双语切换与数据主权**：支持明亮浅色 / Linear Dark 暗黑模式一键切换，内置**简体中文 / English 双语界面实时切换**，支持 JSON 完整备份导入导出与 CSV 报表导出。
+
+
+### 6. 企业级云原生双存储引擎与数据一致性（SQLite + PostgreSQL / Supabase）
+- **双存储引擎无缝切换**：本地部署默认采用零依赖的 Node.js 原生 SQLite（`node:sqlite`）；生产与云端部署（如 Vercel）只需配置 `DATABASE_URL`，系统自动平滑切换至 PostgreSQL / Supabase 存储引擎。
+- **自动化建表与行级安全（RLS）隔离**：连接 PostgreSQL 时自动幂等初始化 11 张数据表并自动执行增量迁移，全部数据表均启用 Supabase 行级安全（RLS），防止敏感配置和凭据通过 Data API 外泄。
+- **事务与并发防撞机制**：数据导入采用校验后事务写入，防止破坏已有数据；任务编号在 PostgreSQL 下采用 advisory lock 防止并发撞号，REST 与 AI 共享级联删除保障数据一致性。
+- **全面安全审计与脱敏**：AI 接口配置持久化脱敏，防止 SSRF；生产依赖 0 漏洞，附带详细安全审查报告 [`20261022_code-review.md`](./20261022_code-review.md)。
 
 ---
 
