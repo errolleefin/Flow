@@ -54,10 +54,9 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
 
   const mins = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
   const secs = String(secondsLeft % 60).padStart(2, '0');
-  const elapsedMinutes = Math.max(
-    1,
-    Math.round((FOCUS_SECONDS - secondsLeft) / 60)
-  );
+  const elapsedSeconds = FOCUS_SECONDS - secondsLeft;
+  const elapsedMinutes =
+    elapsedSeconds < 30 ? 0 : Math.max(1, Math.round(elapsedSeconds / 60));
 
   return (
     <div className="fixed bottom-5 right-5 z-30 w-80 rounded-2xl border border-indigo-500/30 bg-white/95 dark:bg-[#131B2E]/95 backdrop-blur-md shadow-2xl p-4 space-y-3">
@@ -119,15 +118,21 @@ export const PomodoroWidget: React.FC<PomodoroWidgetProps> = ({
           </button>
           <button
             type="button"
+            disabled={elapsedSeconds < 30}
             onClick={() => {
+              if (elapsedSeconds < 30) return;
               onLogMinutes(activeTask.id, elapsedMinutes);
               onClose();
             }}
-            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold inline-flex items-center gap-1"
-            title={tr(
-              '结算当前专注时长并写入任务记录',
-              'Log elapsed focus time to task'
-            )}
+            className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] font-semibold inline-flex items-center gap-1 transition-opacity"
+            title={
+              elapsedSeconds < 30
+                ? tr('专注不足1分钟无需记录', 'Focus under 1 min not logged')
+                : tr(
+                    '结算当前专注时长并写入任务记录',
+                    'Log elapsed focus time to task'
+                  )
+            }
           >
             <Check className="w-3.5 h-3.5" />
             {tr(`记入 +${elapsedMinutes}m`, `Log +${elapsedMinutes}m`)}

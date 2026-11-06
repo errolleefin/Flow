@@ -161,7 +161,11 @@ export interface AiOperationReceipt {
     | 'task_updated'
     | 'task_deleted'
     | 'project_created'
-    | 'member_created';
+    | 'project_updated'
+    | 'project_deleted'
+    | 'member_created'
+    | 'member_updated'
+    | 'member_deleted';
   id: string;
   task_key?: string;
   title: string;

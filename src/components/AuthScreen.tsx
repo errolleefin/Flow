@@ -103,7 +103,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-lg tracking-tight">Flow</span>
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
-                v0.1
+                v0.3.0
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
@@ -312,7 +312,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
       {/* Footer */}
       <div className="text-center text-[11px] text-slate-400">
-        Flow Workspace v0.1 · Released under GPL-3.0 License
+        Flow Workspace v0.3.0 · Released under GPL-3.0 License
       </div>
     </div>
   );

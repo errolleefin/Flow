@@ -23,8 +23,10 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY server ./server
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chown -R node:node /app/data
 VOLUME ["/app/data"]
+
+USER node
 
 EXPOSE 3001
 
