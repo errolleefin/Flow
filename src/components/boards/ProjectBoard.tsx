@@ -16,6 +16,10 @@ interface ProjectBoardProps {
   onEditProject: (project: Project) => void;
   onDeleteProject: (project: Project) => void;
   onStartPomodoro: (task: Task) => void;
+  canCreateProject?: boolean;
+  canEditProject?: boolean;
+  canDeleteProject?: boolean;
+  canCreateTask?: boolean;
 }
 
 export const ProjectBoard: React.FC<ProjectBoardProps> = ({
@@ -29,6 +33,10 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   onEditProject,
   onDeleteProject,
   onStartPomodoro,
+  canCreateProject = true,
+  canEditProject = true,
+  canDeleteProject = true,
+  canCreateTask = true,
 }) => {
   const { tr } = useI18n();
   const [dragOverProj, setDragOverProj] = useState<string | null>(null);
@@ -107,39 +115,45 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onEditProject(proj)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title={tr(
-                        `编辑项目「${proj.name}」`,
-                        `Edit project "${proj.name}"`
-                      )}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteProject(proj)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title={tr(
-                        `删除项目「${proj.name}」`,
-                        `Delete project "${proj.name}"`
-                      )}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onQuickCreate({ project_id: proj.id })}
-                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                      title={tr(
-                        `在「${proj.name}」下新建任务`,
-                        `New task in "${proj.name}"`
-                      )}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                    {canEditProject && (
+                      <button
+                        type="button"
+                        onClick={() => onEditProject(proj)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        title={tr(
+                          `编辑项目「${proj.name}」`,
+                          `Edit project "${proj.name}"`
+                        )}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canDeleteProject && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteProject(proj)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        title={tr(
+                          `删除项目「${proj.name}」`,
+                          `Delete project "${proj.name}"`
+                        )}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canCreateTask && (
+                      <button
+                        type="button"
+                        onClick={() => onQuickCreate({ project_id: proj.id })}
+                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        title={tr(
+                          `在「${proj.name}」下新建任务`,
+                          `New task in "${proj.name}"`
+                        )}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -182,13 +196,15 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                         'Drag any card here to assign to this project'
                       )}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => onQuickCreate({ project_id: proj.id })}
-                      className="mt-2 text-indigo-500 hover:underline text-[11px] font-medium"
-                    >
-                      {tr('+ 新建该项目任务', '+ New project task')}
-                    </button>
+                    {canCreateTask && (
+                      <button
+                        type="button"
+                        onClick={() => onQuickCreate({ project_id: proj.id })}
+                        className="mt-2 text-indigo-500 hover:underline text-[11px] font-medium"
+                      >
+                        {tr('+ 新建该项目任务', '+ New project task')}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   projTasks.map((task) => (
@@ -214,16 +230,18 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
         })}
 
         {/* Add New Project Column Card */}
-        <button
-          type="button"
-          onClick={onOpenNewProject}
-          className="w-64 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 dark:hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors bg-white/40 dark:bg-slate-900/30"
-        >
-          <FolderPlus className="w-6 h-6" />
-          <span className="text-xs font-semibold">
-            {tr('+ 新建项目看板列', '+ New Project Column')}
-          </span>
-        </button>
+        {canCreateProject && (
+          <button
+            type="button"
+            onClick={onOpenNewProject}
+            className="w-64 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 dark:hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors bg-white/40 dark:bg-slate-900/30"
+          >
+            <FolderPlus className="w-6 h-6" />
+            <span className="text-xs font-semibold">
+              {tr('+ 新建项目看板列', '+ New Project Column')}
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );

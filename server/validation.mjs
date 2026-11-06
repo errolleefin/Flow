@@ -29,3 +29,41 @@ export function isNonNegativeNumber(value) {
   const n = Number(value);
   return value !== '' && Number.isFinite(n) && n >= 0;
 }
+
+// Returns an error message for the first invalid task field that is present.
+export function validateTaskFields(fields) {
+  if (!fields || typeof fields !== 'object') return null;
+  if (fields.status !== undefined && !TASK_STATUSES.includes(fields.status)) {
+    return '无效的任务状态';
+  }
+  if (
+    fields.priority !== undefined &&
+    !TASK_PRIORITIES.includes(fields.priority)
+  ) {
+    return '无效的优先级';
+  }
+  if (
+    fields.due_date !== undefined &&
+    fields.due_date !== null &&
+    fields.due_date !== '' &&
+    !isIsoDate(fields.due_date)
+  ) {
+    return '截止日期格式应为 YYYY-MM-DD';
+  }
+  for (const key of ['collaborator_ids', 'tags']) {
+    if (fields[key] !== undefined && !isStringArray(fields[key])) {
+      return `${key} 必须是字符串数组`;
+    }
+  }
+  for (const key of [
+    'estimate_hours',
+    'logged_minutes',
+    'logged_minutes_delta',
+    'position',
+  ]) {
+    if (fields[key] !== undefined && !isNonNegativeNumber(fields[key])) {
+      return `${key} 必须是非负数字`;
+    }
+  }
+  return null;
+}

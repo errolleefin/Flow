@@ -331,6 +331,13 @@ async function initSqliteSchema(db) {
       created_at TEXT NOT NULL,
       FOREIGN KEY (group_id) REFERENCES chat_groups(id) ON DELETE CASCADE
     );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+    CREATE INDEX IF NOT EXISTS idx_subtasks_task_id ON subtasks(task_id);
+    CREATE INDEX IF NOT EXISTS idx_activities_task_id ON activities(task_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_group_id ON chat_group_messages(group_id);
   `);
 
   // Safe migration for existing databases missing subtasks.completed_at or pinned columns
@@ -552,12 +559,45 @@ export async function getBootstrapData(db, visibleProjectIds = 'all') {
       : allowedProjSet.has(t.project_id)
   );
 
-  const allSubtasks = await db.all(
-    'SELECT * FROM subtasks ORDER BY created_at ASC'
-  );
-  const allActivities = await db.all(
-    'SELECT * FROM activities ORDER BY created_at DESC'
-  );
+  let allSubtasks = [];
+  let allActivities = [];
+
+  const isFiltered =
+    visibleProjectIds !== 'all' && Array.isArray(visibleProjectIds);
+
+  if (isFiltered) {
+    if (taskRows.length > 0) {
+      const taskIds = taskRows.map((t) => t.id);
+      const CHUNK_SIZE = 500;
+      for (let i = 0; i < taskIds.length; i += CHUNK_SIZE) {
+        const chunk = taskIds.slice(i, i + CHUNK_SIZE);
+        const placeholders = chunk.map(() => '?').join(', ');
+        const subChunk = await db.all(
+          `SELECT * FROM subtasks WHERE task_id IN (${placeholders}) ORDER BY created_at ASC`,
+          ...chunk
+        );
+        allSubtasks.push(...subChunk);
+        const actChunk = await db.all(
+          `SELECT * FROM activities WHERE task_id IN (${placeholders}) ORDER BY created_at DESC`,
+          ...chunk
+        );
+        allActivities.push(...actChunk);
+      }
+      allSubtasks.sort((a, b) =>
+        a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0
+      );
+      allActivities.sort((a, b) =>
+        a.created_at > b.created_at ? -1 : a.created_at < b.created_at ? 1 : 0
+      );
+    }
+  } else {
+    allSubtasks = await db.all(
+      'SELECT * FROM subtasks ORDER BY created_at ASC'
+    );
+    allActivities = await db.all(
+      'SELECT * FROM activities ORDER BY created_at DESC'
+    );
+  }
 
   const subtasksByTask = new Map();
   for (const s of allSubtasks) {

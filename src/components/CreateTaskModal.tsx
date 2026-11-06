@@ -27,13 +27,13 @@ interface CreateTaskModalProps {
       project_name?: string;
       subtasks?: string[];
     }
-  ) => Promise<void>;
+  ) => Promise<boolean | void>;
   onCreateProject: (payload: {
     name: string;
     code: string;
     color: string;
     description: string;
-  }) => Promise<void>;
+  }) => Promise<boolean | void>;
   onUpdateProject: (
     id: string,
     payload: {
@@ -42,14 +42,14 @@ interface CreateTaskModalProps {
       color: string;
       description: string;
     }
-  ) => Promise<void>;
+  ) => Promise<boolean | void>;
   onDeleteProject?: (project: Project) => void;
   onCreateMember: (payload: {
     name: string;
     role: string;
     avatar_bg: string;
     capacity_hours: number;
-  }) => Promise<void>;
+  }) => Promise<boolean | void>;
   onUpdateMember: (
     id: string,
     payload: {
@@ -58,7 +58,7 @@ interface CreateTaskModalProps {
       avatar_bg: string;
       capacity_hours: number;
     }
-  ) => Promise<void>;
+  ) => Promise<boolean | void>;
   onDeleteMember?: (member: Member) => void;
 }
 
@@ -99,6 +99,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 }) => {
   const { tr } = useI18n();
   // Task form state
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -125,6 +126,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   const [memCapacity, setMemCapacity] = useState(40);
 
   useEffect(() => {
+    setIsSubmitting(false);
     if (mode === 'task') {
       setTitle('');
       setDescription('');
@@ -137,7 +139,9 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           ? defaults.due_date || ''
           : getTodayISO()
       );
-      setAssigneeId(defaults?.assignee_id || members[0]?.id || '');
+      setAssigneeId(
+        defaults?.assignee_id !== undefined ? (defaults.assignee_id || '') : ''
+      );
       setCollaboratorIds([]);
       setEstimateHours(4);
       setTagsText('');
@@ -179,7 +183,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
 
   const handleTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || isSubmitting) return;
     const tags = tagsText
       .split(/[,，\s]+/)
       .map((s) => s.trim())
@@ -189,29 +193,38 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       .map((s) => s.trim())
       .filter(Boolean);
 
-    await onCreateTask({
-      title: title.trim(),
-      description: description.trim(),
-      project_id: projectId,
-      project_name:
-        projects.length === 0
-          ? inlineProjectName.trim() || tr('默认工作项目', 'Default Project')
-          : undefined,
-      status,
-      priority,
-      due_date: dueDate || null,
-      assignee_id: assigneeId || null,
-      collaborator_ids: collaboratorIds,
-      estimate_hours: estimateHours,
-      tags,
-      subtasks,
-    });
-    onClose();
+    setIsSubmitting(true);
+    try {
+      const ok = await onCreateTask({
+        title: title.trim(),
+        description: description.trim(),
+        project_id: projectId,
+        project_name:
+          projects.length === 0
+            ? inlineProjectName.trim() || tr('默认工作项目', 'Default Project')
+            : undefined,
+        status,
+        priority,
+        due_date: dueDate || null,
+        assignee_id: assigneeId || null,
+        collaborator_ids: collaboratorIds,
+        estimate_hours: estimateHours,
+        tags,
+        subtasks,
+      });
+      if (ok !== false) {
+        onClose();
+      }
+    } catch {
+      // 保留弹窗及输入
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projName.trim()) return;
+    if (!projName.trim() || isSubmitting) return;
     const payload = {
       name: projName.trim(),
       code:
@@ -220,33 +233,49 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
       color: projColor,
       description: projDesc.trim(),
     };
-    if (editingProject) {
-      await onUpdateProject(editingProject.id, payload);
-    } else {
-      await onCreateProject(payload);
+
+    setIsSubmitting(true);
+    try {
+      const ok = editingProject
+        ? await onUpdateProject(editingProject.id, payload)
+        : await onCreateProject(payload);
+      if (ok !== false) {
+        setProjName('');
+        setProjCode('');
+        setProjDesc('');
+        onClose();
+      }
+    } catch {
+      // 保留弹窗及输入
+    } finally {
+      setIsSubmitting(false);
     }
-    setProjName('');
-    setProjCode('');
-    setProjDesc('');
-    onClose();
   };
 
   const handleMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!memName.trim()) return;
+    if (!memName.trim() || isSubmitting) return;
     const payload = {
       name: memName.trim(),
       role: memRole.trim() || tr('团队成员', 'Team Member'),
       avatar_bg: memAvatarBg,
       capacity_hours: memCapacity,
     };
-    if (editingMember) {
-      await onUpdateMember(editingMember.id, payload);
-    } else {
-      await onCreateMember(payload);
+
+    setIsSubmitting(true);
+    try {
+      const ok = editingMember
+        ? await onUpdateMember(editingMember.id, payload)
+        : await onCreateMember(payload);
+      if (ok !== false) {
+        setMemName('');
+        onClose();
+      }
+    } catch {
+      // 保留弹窗及输入
+    } finally {
+      setIsSubmitting(false);
     }
-    setMemName('');
-    onClose();
   };
 
   return (
@@ -301,7 +330,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white"
+            disabled={isSubmitting}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X className="w-4 h-4" />
           </button>
@@ -515,16 +545,20 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
+                disabled={isSubmitting}
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {tr('取消', 'Cancel')}
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-sm"
+                disabled={isSubmitting}
+                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold shadow-sm inline-flex items-center gap-2"
               >
-                {tr('立即创建任务', 'Create Task')}
+                {isSubmitting
+                  ? tr('创建中...', 'Creating...')
+                  : tr('立即创建任务', 'Create Task')}
               </button>
             </div>
           </form>
@@ -606,11 +640,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 {editingProject && onDeleteProject && (
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => {
                       onDeleteProject(editingProject);
                       onClose();
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     {tr('删除项目', 'Delete Project')}
@@ -620,16 +655,20 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {tr('取消', 'Cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold inline-flex items-center gap-2"
                 >
-                  {editingProject
+                  {isSubmitting
+                    ? tr('保存中...', 'Saving...')
+                    : editingProject
                     ? tr('保存修改', 'Save Changes')
                     : tr('创建项目', 'Create Project')}
                 </button>
@@ -719,11 +758,12 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                 {editingMember && onDeleteMember && (
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => {
                       onDeleteMember(editingMember);
                       onClose();
                     }}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     {tr('删除成员', 'Delete Member')}
@@ -733,16 +773,20 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {tr('取消', 'Cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold"
+                  disabled={isSubmitting}
+                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold inline-flex items-center gap-2"
                 >
-                  {editingMember
+                  {isSubmitting
+                    ? tr('保存中...', 'Saving...')
+                    : editingMember
                     ? tr('保存修改', 'Save Changes')
                     : tr('添加成员', 'Add Member')}
                 </button>

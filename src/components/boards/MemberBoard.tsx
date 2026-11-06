@@ -15,6 +15,8 @@ interface MemberBoardProps {
   onEditMember: (member: Member) => void;
   onDeleteMember: (member: Member) => void;
   onStartPomodoro: (task: Task) => void;
+  canManageMembers?: boolean;
+  canCreateTask?: boolean;
 }
 
 export const MemberBoard: React.FC<MemberBoardProps> = ({
@@ -28,6 +30,8 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
   onEditMember,
   onDeleteMember,
   onStartPomodoro,
+  canManageMembers = true,
+  canCreateTask = true,
 }) => {
   const { tr } = useI18n();
   const [dragOverMember, setDragOverMember] = useState<string | null>(null);
@@ -168,39 +172,45 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-0.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => onEditMember(mem)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                        title={tr(
-                          `编辑成员「${mem.name}」`,
-                          `Edit member "${mem.name}"`
-                        )}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteMember(mem)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                        title={tr(
-                          `删除成员「${mem.name}」`,
-                          `Delete member "${mem.name}"`
-                        )}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onQuickCreate({ assignee_id: mem.id })}
-                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
-                        title={tr(
-                          `指派新任务给 ${mem.name}`,
-                          `Assign new task to ${mem.name}`
-                        )}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                      {canManageMembers && (
+                        <button
+                          type="button"
+                          onClick={() => onEditMember(mem)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                          title={tr(
+                            `编辑成员「${mem.name}」`,
+                            `Edit member "${mem.name}"`
+                          )}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canManageMembers && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteMember(mem)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                          title={tr(
+                            `删除成员「${mem.name}」`,
+                            `Delete member "${mem.name}"`
+                          )}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canCreateTask && (
+                        <button
+                          type="button"
+                          onClick={() => onQuickCreate({ assignee_id: mem.id })}
+                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                          title={tr(
+                            `指派新任务给 ${mem.name}`,
+                            `Assign new task to ${mem.name}`
+                          )}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -315,16 +325,18 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
           </div>
 
           {/* Add New Member Card */}
-          <button
-            type="button"
-            onClick={onOpenNewMember}
-            className="w-60 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors"
-          >
-            <UserPlus className="w-6 h-6" />
-            <span className="text-xs font-semibold">
-              {tr('+ 新增相关人员列', '+ New Member Column')}
-            </span>
-          </button>
+          {canManageMembers && (
+            <button
+              type="button"
+              onClick={onOpenNewMember}
+              className="w-60 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors"
+            >
+              <UserPlus className="w-6 h-6" />
+              <span className="text-xs font-semibold">
+                {tr('+ 新增相关人员列', '+ New Member Column')}
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </div>

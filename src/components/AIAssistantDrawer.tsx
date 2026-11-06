@@ -303,7 +303,14 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
   };
 
   const renderOperationBadge = (op: AiOperationReceipt, idx: number) => {
-    const isTask = op.kind === 'task_created' || op.kind === 'task_updated';
+    const isTask =
+      (op.kind === 'task_created' || op.kind === 'task_updated') &&
+      Boolean(op.id);
+    const isDeleted =
+      op.kind === 'task_deleted' ||
+      op.kind === 'project_deleted' ||
+      op.kind === 'member_deleted';
+
     return (
       <div
         key={`${op.id}-${idx}`}
@@ -315,6 +322,8 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
         className={`p-2.5 rounded-xl border text-xs flex items-start justify-between gap-2 transition-all ${
           isTask
             ? 'bg-indigo-500/10 border-indigo-500/30 hover:border-indigo-500 cursor-pointer'
+            : isDeleted
+            ? 'bg-rose-500/10 border-rose-500/30'
             : 'bg-emerald-500/10 border-emerald-500/30'
         }`}
       >
@@ -330,16 +339,41 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
                 {tr('↻ 更新任务', '↻ Task Updated')}
               </span>
             )}
+            {op.kind === 'task_deleted' && (
+              <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold">
+                {tr('🗑️ 删除任务', '🗑️ Task Deleted')}
+              </span>
+            )}
             {op.kind === 'project_created' && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[10px] font-bold">
                 <FolderPlus className="w-3 h-3" />{' '}
                 {tr('新建项目', 'Project Created')}
               </span>
             )}
+            {op.kind === 'project_updated' && (
+              <span className="px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-bold">
+                {tr('↻ 更新项目', '↻ Project Updated')}
+              </span>
+            )}
+            {op.kind === 'project_deleted' && (
+              <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold">
+                {tr('🗑️ 删除项目', '🗑️ Project Deleted')}
+              </span>
+            )}
             {op.kind === 'member_created' && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-600 text-white text-[10px] font-bold">
                 <UserPlus className="w-3 h-3" />{' '}
                 {tr('新增人员', 'Member Added')}
+              </span>
+            )}
+            {op.kind === 'member_updated' && (
+              <span className="px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-bold">
+                {tr('↻ 更新人员', '↻ Member Updated')}
+              </span>
+            )}
+            {op.kind === 'member_deleted' && (
+              <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold">
+                {tr('🗑️ 移除人员', '🗑️ Member Removed')}
               </span>
             )}
             {op.task_key && (
@@ -361,7 +395,11 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
               : ''}
           </p>
         </div>
-        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+        {isDeleted ? (
+          <Trash2 className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+        ) : (
+          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+        )}
       </div>
     );
   };

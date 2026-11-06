@@ -328,7 +328,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               Flow
             </span>
             <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
-              v0.2
+              v0.3.0
             </span>
           </div>
         </div>

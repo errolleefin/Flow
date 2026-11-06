@@ -254,6 +254,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if ((e?.nativeEvent as any)?.isComposing) return;
     if (!activeGroup || !input.trim() || sending) return;
     setSending(true);
     try {
@@ -971,6 +972,12 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                      if (e.key === 'Enter') {
+                        // 表单自然提交或主动触发
+                      }
+                    }}
                     placeholder={tr(
                       `在 #${activeGroup.name} 中输入消息（支持 @姓名 或 #任务编号）...`,
                       `Message #${activeGroup.name} (@mention or #TASK-KEY)...`

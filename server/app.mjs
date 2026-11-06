@@ -27,6 +27,7 @@ import {
   isHexColor,
   isStringArray,
   isNonNegativeNumber,
+  validateTaskFields,
 } from './validation.mjs';
 import {
   getAiSettings,
@@ -78,38 +79,6 @@ function maskApiKey(key) {
   if (!key) return '';
   if (key.length <= 8) return '••••';
   return `${key.slice(0, 3)}••••${key.slice(-4)}`;
-}
-
-// Returns an error message for the first invalid task field that is present.
-function validateTaskFields(fields) {
-  if (fields.status !== undefined && !TASK_STATUSES.includes(fields.status)) {
-    return '无效的任务状态';
-  }
-  if (
-    fields.priority !== undefined &&
-    !TASK_PRIORITIES.includes(fields.priority)
-  ) {
-    return '无效的优先级';
-  }
-  if (
-    fields.due_date !== undefined &&
-    fields.due_date !== null &&
-    fields.due_date !== '' &&
-    !isIsoDate(fields.due_date)
-  ) {
-    return '截止日期格式应为 YYYY-MM-DD';
-  }
-  for (const key of ['collaborator_ids', 'tags']) {
-    if (fields[key] !== undefined && !isStringArray(fields[key])) {
-      return `${key} 必须是字符串数组`;
-    }
-  }
-  for (const key of ['estimate_hours', 'logged_minutes', 'position']) {
-    if (fields[key] !== undefined && !isNonNegativeNumber(fields[key])) {
-      return `${key} 必须是非负数字`;
-    }
-  }
-  return null;
 }
 
 // Checks a JSON backup before anything is deleted; returns the first problem.
@@ -860,10 +829,12 @@ export function createApp(options = {}) {
         return res.status(400).json({ error: '负责人不存在' });
       }
 
-      let project = project_id
+      const hasExplicitProject =
+        project_id !== undefined && project_id !== null;
+      let project = hasExplicitProject
         ? await db.get('SELECT * FROM projects WHERE id = ?', project_id)
         : null;
-      if (project && !canSeeProject(req.user, project.id)) {
+      if (hasExplicitProject && (!project || !canSeeProject(req.user, project.id))) {
         return res.status(404).json({ error: '未找到该项目' });
       }
       if (!project) {
@@ -1027,10 +998,18 @@ export function createApp(options = {}) {
         updates.estimate_hours !== undefined
           ? Number(updates.estimate_hours)
           : existing.estimate_hours;
-      const nextLogged =
-        updates.logged_minutes !== undefined
-          ? Math.round(Number(updates.logged_minutes))
-          : existing.logged_minutes;
+      let nextLogged = existing.logged_minutes;
+      let loggedDeltaApplied = false;
+      if (updates.logged_minutes_delta !== undefined) {
+        const deltaMinutes = Math.round(Number(updates.logged_minutes_delta));
+        nextLogged = existing.logged_minutes + deltaMinutes;
+        loggedDeltaApplied = true;
+        if (deltaMinutes > 0) {
+          changes.push(`增加了 ${deltaMinutes} 分钟专注投入`);
+        }
+      } else if (updates.logged_minutes !== undefined) {
+        nextLogged = Math.round(Number(updates.logged_minutes));
+      }
       const nextPosition =
         updates.position !== undefined
           ? Math.round(Number(updates.position))
@@ -1066,7 +1045,7 @@ export function createApp(options = {}) {
           `优先级调整为「${PRIORITY_LABELS[nextPriority] || nextPriority}」`
         );
       }
-      if (nextLogged !== existing.logged_minutes) {
+      if (!loggedDeltaApplied && nextLogged !== existing.logged_minutes) {
         const delta = nextLogged - existing.logged_minutes;
         if (delta > 0) {
           changes.push(`记录了 ${delta} 分钟专注投入`);

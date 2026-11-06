@@ -113,7 +113,8 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
   };
 
   const handlePostComment = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    if ((e?.nativeEvent as any)?.isComposing) return;
     if (!commentText.trim()) return;
     await onAddComment(task.id, commentText.trim());
     setCommentText('');
@@ -415,7 +416,8 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                     onClick={() =>
                       onUpdateTask(task.id, {
                         logged_minutes: (task.logged_minutes || 0) + 30,
-                      })
+                        logged_minutes_delta: 30,
+                      } as any)
                     }
                     className="px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold"
                   >
@@ -625,6 +627,9 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                   type="text"
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  }}
                   placeholder={tr(
                     '同步最新进展或 @相关人员...',
                     'Share an update or @mention team members...'

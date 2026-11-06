@@ -535,7 +535,12 @@ export async function executeAiActions(db, actions, user) {
         const id = `proj-${crypto.randomUUID().slice(0, 8)}`;
         const code =
           (act.code && String(act.code).trim().toUpperCase()) ||
-          String(act.name).trim().slice(0, 3).toUpperCase();
+          String(act.name)
+            .trim()
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(0, 3)
+            .toUpperCase() ||
+          'PRJ';
         const color = isHexColor(act.color)
           ? act.color
           : PROJECT_PALETTE[count % PROJECT_PALETTE.length];
@@ -836,7 +841,7 @@ export async function executeAiActions(db, actions, user) {
         existing.id
       );
       operations.push({
-        kind: 'project_created',
+        kind: 'project_updated',
         id: existing.id,
         title: nextName,
         summary: `已更新项目 [${nextCode}] ${nextName}`,
@@ -852,7 +857,7 @@ export async function executeAiActions(db, actions, user) {
       }
       await deleteProjectCascade(db, existing.id);
       operations.push({
-        kind: 'task_deleted',
+        kind: 'project_deleted',
         id: existing.id,
         title: existing.name,
         summary: `已删除项目「${existing.name}」`,
@@ -862,39 +867,43 @@ export async function executeAiActions(db, actions, user) {
         'SELECT * FROM members WHERE LOWER(name) = LOWER(?)',
         String(act.name).trim()
       );
-      if (existing) {
-        const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
-        const nextRole = act.role ? String(act.role).trim() : existing.role;
-        const nextCap =
-          Math.round(Number(act.capacity_hours)) || existing.capacity_hours;
-        await db.run(
-          'UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?',
-          nextName,
-          nextRole,
-          nextCap,
-          existing.id
-        );
-        operations.push({
-          kind: 'member_created',
-          id: existing.id,
-          title: nextName,
-          summary: `已更新成员：${nextName} (${nextRole}, ${nextCap}h/周)`,
-        });
+      if (!existing) {
+        skip(act, '未找到该成员');
+        continue;
       }
+      const nextName = act.new_name ? String(act.new_name).trim() : existing.name;
+      const nextRole = act.role ? String(act.role).trim() : existing.role;
+      const nextCap =
+        Math.round(Number(act.capacity_hours)) || existing.capacity_hours;
+      await db.run(
+        'UPDATE members SET name = ?, role = ?, capacity_hours = ? WHERE id = ?',
+        nextName,
+        nextRole,
+        nextCap,
+        existing.id
+      );
+      operations.push({
+        kind: 'member_updated',
+        id: existing.id,
+        title: nextName,
+        summary: `已更新成员：${nextName} (${nextRole}, ${nextCap}h/周)`,
+      });
     } else if (type === 'delete_member' && act.name) {
       const existing = await db.get(
         'SELECT * FROM members WHERE LOWER(name) = LOWER(?)',
         String(act.name).trim()
       );
-      if (existing) {
-        await deleteMemberCascade(db, existing.id);
-        operations.push({
-          kind: 'task_deleted',
-          id: existing.id,
-          title: existing.name,
-          summary: `已移除团队成员「${existing.name}」`,
-        });
+      if (!existing) {
+        skip(act, '未找到该成员');
+        continue;
       }
+      await deleteMemberCascade(db, existing.id);
+      operations.push({
+        kind: 'member_deleted',
+        id: existing.id,
+        title: existing.name,
+        summary: `已移除团队成员「${existing.name}」`,
+      });
     }
   }
 

@@ -78,6 +78,30 @@ function isSelfChatMessage(
   return false;
 }
 
+function areChatGroupsEqual(prev: ChatGroup[], next: ChatGroup[]): boolean {
+  if (prev === next) return true;
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.id !== b.id ||
+      a.name !== b.name ||
+      a.description !== b.description ||
+      a.project_id !== b.project_id ||
+      a.message_count !== b.message_count ||
+      a.last_message_id !== b.last_message_id ||
+      a.last_message_at !== b.last_message_at ||
+      a.last_message_sender !== b.last_message_sender ||
+      a.last_message_content !== b.last_message_content ||
+      a.member_ids?.length !== b.member_ids?.length
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export const App: React.FC = () => {
   const { tr } = useI18n();
   const [authChecking, setAuthChecking] = useState<boolean>(true);
@@ -104,6 +128,7 @@ export const App: React.FC = () => {
     ChatPopupNotification[]
   >([]);
   const lastSeenMsgByGroupRef = useRef<Record<string, string | null>>({});
+  const lastSeenMsgTimeByGroupRef = useRef<Record<string, number>>({});
   const seenInitializedRef = useRef<boolean>(false);
 
   const [loading, setLoading] = useState<boolean>(true);
@@ -246,10 +271,15 @@ export const App: React.FC = () => {
       if (data.chatGroups) {
         setChatGroups(data.chatGroups);
         const map: Record<string, string | null> = {};
+        const timeMap: Record<string, number> = {};
         for (const grp of data.chatGroups) {
           map[grp.id] = grp.last_message_id ?? null;
+          timeMap[grp.id] = grp.last_message_at
+            ? new Date(grp.last_message_at).getTime()
+            : 0;
         }
         lastSeenMsgByGroupRef.current = map;
+        lastSeenMsgTimeByGroupRef.current = timeMap;
         seenInitializedRef.current = true;
       }
       if (data.currentUser) {
@@ -274,14 +304,24 @@ export const App: React.FC = () => {
       try {
         const res = await apiClient.getChatGroups();
         const groups = res.groups || [];
-        setChatGroups(groups);
+        setChatGroups((prevGroups) => {
+          if (areChatGroupsEqual(prevGroups, groups)) {
+            return prevGroups;
+          }
+          return groups;
+        });
 
         if (!seenInitializedRef.current) {
           const initMap: Record<string, string | null> = {};
+          const initTimeMap: Record<string, number> = {};
           for (const g of groups) {
             initMap[g.id] = g.last_message_id ?? null;
+            initTimeMap[g.id] = g.last_message_at
+              ? new Date(g.last_message_at).getTime()
+              : 0;
           }
           lastSeenMsgByGroupRef.current = initMap;
+          lastSeenMsgTimeByGroupRef.current = initTimeMap;
           seenInitializedRef.current = true;
           return;
         }
@@ -290,20 +330,29 @@ export const App: React.FC = () => {
         for (const g of groups) {
           const latestId = g.last_message_id ?? null;
           const prevId = lastSeenMsgByGroupRef.current[g.id];
-          if (latestId && latestId !== prevId) {
+          const prevTime = lastSeenMsgTimeByGroupRef.current[g.id] || 0;
+          const currTime = g.last_message_at
+            ? new Date(g.last_message_at).getTime()
+            : 0;
+
+          if (prevId === undefined) {
             lastSeenMsgByGroupRef.current[g.id] = latestId;
-            enqueueChatNotification({
-              messageId: latestId,
-              groupId: g.id,
-              groupName: g.name,
-              projectColor:
-                (g.project_id && projColorMap.get(g.project_id)) || '#6366f1',
-              senderMemberId: g.last_message_sender_member_id ?? null,
-              senderName: g.last_message_sender || tr('群成员', 'Member'),
-              content: g.last_message_content || '',
-            });
-          } else if (prevId === undefined) {
+            lastSeenMsgTimeByGroupRef.current[g.id] = currTime;
+          } else if (latestId && latestId !== prevId) {
+            if (currTime > prevTime) {
+              enqueueChatNotification({
+                messageId: latestId,
+                groupId: g.id,
+                groupName: g.name,
+                projectColor:
+                  (g.project_id && projColorMap.get(g.project_id)) || '#6366f1',
+                senderMemberId: g.last_message_sender_member_id ?? null,
+                senderName: g.last_message_sender || tr('群成员', 'Member'),
+                content: g.last_message_content || '',
+              });
+            }
             lastSeenMsgByGroupRef.current[g.id] = latestId;
+            lastSeenMsgTimeByGroupRef.current[g.id] = currTime;
           }
         }
       } catch {
@@ -484,7 +533,7 @@ export const App: React.FC = () => {
       project_name?: string;
       subtasks?: string[];
     }
-  ) => {
+  ): Promise<boolean> => {
     try {
       const created = await apiClient.createTask(payload);
       if (
@@ -501,6 +550,7 @@ export const App: React.FC = () => {
           `Created task [${created.task_key}] ${created.title}`
         )
       );
+      return true;
     } catch (err) {
       showToast(
         err instanceof Error
@@ -508,6 +558,7 @@ export const App: React.FC = () => {
           : tr('创建任务失败', 'Failed to create task'),
         'error'
       );
+      return false;
     }
   };
 
@@ -607,13 +658,14 @@ export const App: React.FC = () => {
     code: string;
     color: string;
     description: string;
-  }) => {
+  }): Promise<boolean> => {
     try {
       const proj = await apiClient.createProject(payload);
       setProjects((prev) => [...prev, proj]);
       showToast(
         tr(`已新建项目「${proj.name}」`, `Created project "${proj.name}"`)
       );
+      return true;
     } catch (err) {
       showToast(
         err instanceof Error
@@ -621,6 +673,7 @@ export const App: React.FC = () => {
           : tr('新建项目失败', 'Failed to create project'),
         'error'
       );
+      return false;
     }
   };
 
@@ -687,13 +740,14 @@ export const App: React.FC = () => {
     role: string;
     avatar_bg: string;
     capacity_hours: number;
-  }) => {
+  }): Promise<boolean> => {
     try {
       const mem = await apiClient.createMember(payload);
       setMembers((prev) => [...prev, mem]);
       showToast(
         tr(`已添加团队成员「${mem.name}」`, `Added member "${mem.name}"`)
       );
+      return true;
     } catch (err) {
       showToast(
         err instanceof Error
@@ -701,6 +755,7 @@ export const App: React.FC = () => {
           : tr('添加成员失败', 'Failed to add member'),
         'error'
       );
+      return false;
     }
   };
 
@@ -1061,6 +1116,10 @@ export const App: React.FC = () => {
                   tasks={filteredTasks}
                   projects={projects}
                   members={members}
+                  canCreateProject={currentUser.permissions.can_create_project}
+                  canEditProject={currentUser.permissions.can_edit_project}
+                  canDeleteProject={currentUser.permissions.can_delete_project}
+                  canCreateTask={currentUser.permissions.can_create_task}
                   onUpdateTask={handleUpdateTask}
                   onSelectTask={(t) => setSelectedTaskId(t.id)}
                   onQuickCreate={(defaults) => {
@@ -1115,6 +1174,8 @@ export const App: React.FC = () => {
                   tasks={filteredTasks}
                   projects={projects}
                   members={members}
+                  canManageMembers={currentUser.permissions.can_manage_members}
+                  canCreateTask={currentUser.permissions.can_create_task}
                   onUpdateTask={handleUpdateTask}
                   onSelectTask={(t) => setSelectedTaskId(t.id)}
                   onQuickCreate={(defaults) => {
@@ -1303,6 +1364,9 @@ export const App: React.FC = () => {
         onToggleMuteGroup={handleToggleMuteGroup}
         onMessageSent={(group, message) => {
           lastSeenMsgByGroupRef.current[group.id] = message.id;
+          lastSeenMsgTimeByGroupRef.current[group.id] = new Date(
+            message.created_at
+          ).getTime();
           // Only notify if the message was sent under another group member's identity (never for self)
           if (
             !isSelfChatMessage(
@@ -1440,7 +1504,8 @@ export const App: React.FC = () => {
           if (target) {
             handleUpdateTask(taskId, {
               logged_minutes: (target.logged_minutes || 0) + mins,
-            });
+              logged_minutes_delta: mins,
+            } as any);
           }
         }}
       />

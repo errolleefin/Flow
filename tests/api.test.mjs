@@ -78,6 +78,14 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   assert.deepEqual(createdTask.collaborator_ids, [targetCollab.id]);
   assert.equal(createdTask.due_date, '2026-10-25');
 
+  // 3b. Creating a task with an explicit invalid project_id returns 404
+  const invalidProjRes = await api('POST', '/api/tasks', {
+    token,
+    body: { title: '无效项目任务', project_id: 'non-existent-proj-id' },
+  });
+  assert.equal(invalidProjRes.status, 404);
+  assert.equal(invalidProjRes.data.error, '未找到该项目');
+
   // 4. Patch task across boards (status, project_id, assignee_id, due_date, logged_minutes)
   const patchRes = await api('PATCH', `/api/tasks/${createdTask.id}`, {
     token,
@@ -101,6 +109,24 @@ test('SQLite database initializes clean (zero mock data) and supports full CRUD 
   const changeLog = patchedTask.activities.find((a) => a.content.includes('状态变更'));
   assert.equal(changeLog.member_id, targetAssignee.id);
   assert.equal(changeLog.actor_name, '张明');
+
+  // 4b. Increment logged minutes atomically via logged_minutes_delta
+  const deltaRes = await api('PATCH', `/api/tasks/${createdTask.id}`, {
+    token,
+    body: { logged_minutes_delta: 25 },
+  });
+  assert.equal(deltaRes.status, 200);
+  assert.equal(deltaRes.data.logged_minutes, 75); // 50 + 25
+  assert.ok(
+    deltaRes.data.activities.some((a) => a.content.includes('增加了 25 分钟专注投入')),
+    'Should record delta minutes activity log'
+  );
+
+  const negDeltaRes = await api('PATCH', `/api/tasks/${createdTask.id}`, {
+    token,
+    body: { logged_minutes_delta: -10 },
+  });
+  assert.equal(negDeltaRes.status, 400);
 
   // 5. Add & toggle subtask (verify completed_at timestamp is automatically set and cleared)
   const subRes = await api('POST', `/api/tasks/${createdTask.id}/subtasks`, {

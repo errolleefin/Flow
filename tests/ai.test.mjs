@@ -295,7 +295,60 @@ test('AI actions validate fields, keep task keys unique and share cascades', asy
     display_name: 'Dave',
     auto_create_member: true,
   });
-  await chat([{ type: 'delete_member', name: 'Dave' }]);
+  const delDaveRes = await chat([{ type: 'delete_member', name: 'Dave' }]);
+  assert.ok(
+    delDaveRes.assistantMessage.operations.some(
+      (op) => op.kind === 'member_deleted' && op.title === 'Dave'
+    )
+  );
   const users = (await api('GET', '/api/users', { token })).data.users;
   assert.equal(users.find((u) => u.id === user.id).member_id, null);
+
+  // Receipt kinds and missing member skip checks
+  const updateProjRes = await chat([
+    { type: 'update_project', name: '核心', new_name: '核心升级版', code: 'NEW' },
+  ]);
+  assert.ok(
+    updateProjRes.assistantMessage.operations.some(
+      (op) => op.kind === 'project_updated' && op.title === '核心升级版'
+    )
+  );
+
+  const deleteProjRes = await chat([{ type: 'delete_project', name: '核心升级版' }]);
+  assert.ok(
+    deleteProjRes.assistantMessage.operations.some(
+      (op) => op.kind === 'project_deleted' && op.title === '核心升级版'
+    )
+  );
+
+  await chat([{ type: 'create_member', name: '小王', role: '测试' }]);
+  const updateMemRes = await chat([
+    { type: 'update_member', name: '小王', new_name: '王工', role: '资深测试' },
+  ]);
+  assert.ok(
+    updateMemRes.assistantMessage.operations.some(
+      (op) => op.kind === 'member_updated' && op.title === '王工'
+    )
+  );
+
+  const deleteMemRes = await chat([{ type: 'delete_member', name: '王工' }]);
+  assert.ok(
+    deleteMemRes.assistantMessage.operations.some(
+      (op) => op.kind === 'member_deleted' && op.title === '王工'
+    )
+  );
+
+  const missingMemRes = await chat([
+    { type: 'update_member', name: '不存在成员' },
+    { type: 'delete_member', name: '不存在成员' },
+  ]);
+  assert.match(missingMemRes.assistantMessage.content, /未找到该成员/);
+
+  // create_project falls back to PRJ if name contains no alphanumeric chars
+  const fallbackCodeRes = await chat([
+    { type: 'create_project', name: '🌟🌟🌟' },
+  ]);
+  const fallbackProj = fallbackCodeRes.bootstrap.projects.find((p) => p.name === '🌟🌟🌟');
+  assert.ok(fallbackProj);
+  assert.equal(fallbackProj.code, 'PRJ');
 });
