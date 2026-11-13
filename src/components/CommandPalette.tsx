@@ -70,16 +70,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-slate-950/50 backdrop-blur-xs p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-slate-950/60 backdrop-blur-sm p-4">
       <div
         className="fixed inset-0"
         onClick={onClose}
         aria-label={tr('关闭命令面板', 'Close command palette')}
       />
-      <div className="relative z-10 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111726] shadow-2xl overflow-hidden">
+      <div className="relative z-10 w-full max-w-xl rounded-2xl border border-slate-200 dark:border-white/[0.08] bg-white/95 dark:bg-[#111726]/95 backdrop-blur-xl shadow-modal overflow-hidden animate-pop-in">
         {/* Search Input */}
-        <div className="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
-          <Search className="w-4 h-4 text-indigo-500 shrink-0" />
+        <div className="px-4 py-3.5 border-b border-slate-200 dark:border-white/[0.08] flex items-center gap-3">
+          <Search className="w-4 h-4 text-blue-500 shrink-0" />
           <input
             type="text"
             autoFocus
@@ -94,7 +94,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
@@ -113,13 +113,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onClose();
                   onOpenCreateTask();
                 }}
-                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 transition-colors"
+                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-500/10 text-slate-700 dark:text-slate-200 transition-colors"
               >
                 <span className="flex items-center gap-2 font-medium">
-                  <Plus className="w-4 h-4 text-indigo-500" />
+                  <Plus className="w-4 h-4 text-blue-500" />
                   {tr('新建任务', 'New Task')}
                 </span>
-                <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px]">
+                <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/[0.08] font-mono text-[10px] border border-slate-200 dark:border-white/[0.08]">
                   N
                 </kbd>
               </button>
@@ -130,13 +130,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   onToggleDarkMode();
                   onClose();
                 }}
-                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 transition-colors"
+                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-500/10 text-slate-700 dark:text-slate-200 transition-colors"
               >
                 <span className="flex items-center gap-2 font-medium">
                   {darkMode ? (
                     <Sun className="w-4 h-4 text-amber-400" />
                   ) : (
-                    <Moon className="w-4 h-4 text-indigo-500" />
+                    <Moon className="w-4 h-4 text-blue-500" />
                   )}
                   {darkMode
                     ? tr('切换明亮主题', 'Light Theme')
@@ -150,10 +150,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   toggleLang();
                   onClose();
                 }}
-                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-indigo-500/10 text-slate-700 dark:text-slate-200 transition-colors"
+                className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-blue-500/10 text-slate-700 dark:text-slate-200 transition-colors"
               >
                 <span className="flex items-center gap-2 font-medium">
-                  <Languages className="w-4 h-4 text-indigo-500" />
+                  <Languages className="w-4 h-4 text-blue-500" />
                   {lang === 'zh' ? 'Switch to English' : '切换为简体中文'}
                 </span>
               </button>
@@ -177,7 +177,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                         onSelectView(view.id);
                         onClose();
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/70 text-slate-700 dark:text-slate-200 transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.06] text-slate-700 dark:text-slate-200 transition-colors"
                     >
                       <span className="flex items-center gap-2.5">
                         <Icon className={`w-4 h-4 ${view.badgeColor}`} />
@@ -215,7 +215,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       onSelectTask(t);
                       onClose();
                     }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/70 text-left transition-colors"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.06] text-left transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="font-mono text-[11px] text-slate-400 shrink-0">
@@ -241,10 +241,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           </div>
         </div>
 
-        <div className="px-4 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-center justify-between text-[11px] text-slate-400">
-          <span className="inline-flex items-center gap-1">
-            <Command className="w-3 h-3" />{' '}
-            {tr('Flow 极客命令中心', 'Flow Command Center')}
+        <div className="px-4 py-2.5 border-t border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-[#090D14]/70 flex items-center justify-between text-[11px] text-slate-400">
+          <span className="inline-flex items-center gap-1 font-medium">
+            <Command className="w-3 h-3 text-blue-500" />{' '}
+            {tr('Flow 命令中心', 'Flow Command Center')}
           </span>
           <span>{tr('按 ESC 退出', 'Press ESC to close')}</span>
         </div>

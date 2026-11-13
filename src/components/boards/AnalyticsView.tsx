@@ -69,7 +69,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     <div className="h-full overflow-y-auto px-6 py-5 space-y-6">
       {/* Top 4 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
+        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] shadow-card hover:shadow-card-hover transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {tr('全局任务交付率', 'Overall Delivery Rate')}
@@ -97,7 +97,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
         </div>
 
-        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
+        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] shadow-card hover:shadow-card-hover transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {tr('死线预警与今日到期', 'Overdue & Due Today')}
@@ -133,12 +133,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
+        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] shadow-card hover:shadow-card-hover transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {tr('专注工时投入 vs 预估', 'Focus Hours vs. Estimated')}
             </span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-500 flex items-center justify-center">
               <Timer className="w-4 h-4" />
             </div>
           </div>
@@ -161,7 +161,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
+        <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] shadow-card hover:shadow-card-hover transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {tr('活跃项目与团队规模', 'Active Projects & Team Size')}
@@ -201,10 +201,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       {/* Middle 2-Column Charts: Project Health & Member Workload */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* 1. Project Progress Breakdown */}
-        <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm space-y-4">
+        <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] shadow-card space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <FolderKanban className="w-4 h-4 text-indigo-500" />
+              <FolderKanban className="w-4 h-4 text-blue-500" />
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 {tr(
                   '各项目交付健康度与进度对比',
@@ -273,7 +273,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
 
         {/* 2. Team Member Workload & Collaboration */}
-        <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm space-y-4">
+        <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] shadow-card space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-emerald-500" />
@@ -369,7 +369,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       </div>
 
       {/* Bottom High-Priority & Deadline Radar Table */}
-      <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#121824] shadow-sm">
+      <div className="p-5 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] shadow-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-rose-500" />

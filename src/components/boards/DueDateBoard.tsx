@@ -246,7 +246,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                   }}
                   className={`group p-2 flex flex-col justify-between transition-colors ${
                     isToday
-                      ? 'bg-indigo-500/5 dark:bg-indigo-500/10'
+                      ? 'bg-blue-500/5 dark:bg-blue-500/10'
                       : 'hover:bg-slate-50/80 dark:hover:bg-slate-900/40'
                   }`}
                 >
@@ -256,7 +256,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                       <span
                         className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold ${
                           isToday
-                            ? 'bg-indigo-600 text-white shadow-sm'
+                            ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25'
                             : 'text-slate-700 dark:text-slate-300'
                         }`}
                       >
@@ -265,7 +265,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onQuickCreate({ due_date: cell.iso })}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-indigo-500/15 text-indigo-500 transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-blue-500/15 text-blue-500 transition-opacity"
                         title={tr(
                           `新建 ${cell.iso} 截止的任务`,
                           `New task due on ${cell.iso}`
@@ -290,7 +290,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                             className={`px-2 py-1 rounded-md text-[11px] border cursor-pointer truncate flex items-center gap-1.5 transition-all ${
                               t.status === 'done'
                                 ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 line-through border-transparent'
-                                : 'bg-white dark:bg-[#151D2C] text-slate-800 dark:text-slate-100 border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-500'
+                                : 'bg-white dark:bg-[#141A29] text-slate-800 dark:text-slate-100 border-slate-200/80 dark:border-white/[0.08] hover:border-blue-500/50 shadow-xs'
                             }`}
                           >
                             <span
@@ -322,14 +322,14 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
       {/* Sub-mode Switcher Bar */}
       <div className="px-6 pt-3 pb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-xl p-1 bg-slate-200/70 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <div className="inline-flex rounded-xl p-1 bg-slate-200/70 dark:bg-slate-900 border border-slate-200 dark:border-white/[0.08]">
             <button
               type="button"
               onClick={() => setSubMode('kanban')}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                 subMode === 'kanban'
-                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400'
+                  ? 'bg-white dark:bg-[#141A29] text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Kanban className="w-3.5 h-3.5" />
@@ -340,8 +340,8 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
               onClick={() => setSubMode('calendar')}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
                 subMode === 'calendar'
-                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400'
+                  ? 'bg-white dark:bg-[#141A29] text-blue-600 dark:text-blue-400 shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <CalendarIcon className="w-3.5 h-3.5" />
@@ -356,12 +356,12 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
           </span>
         </div>
 
-        <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 cursor-pointer">
+        <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 cursor-pointer">
           <input
             type="checkbox"
             checked={hideCompleted}
             onChange={(e) => setHideCompleted(e.target.checked)}
-            className="rounded border-slate-300 text-indigo-600 focus:ring-0"
+            className="rounded border-slate-300 text-blue-600 focus:ring-0"
           />
           <span>{tr('隐藏已完成任务', 'Hide Completed Tasks')}</span>
         </label>
@@ -389,12 +389,12 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                   onDrop={(e) => handleDropBucket(e, col.id)}
                   className={`w-80 flex flex-col h-full rounded-2xl border transition-all ${
                     isOver
-                      ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 ring-2 ring-indigo-500/20'
-                      : 'border-slate-200/80 dark:border-slate-800/80 bg-slate-100/60 dark:bg-[#0E1420]/90'
+                      ? 'drop-zone-active border-blue-500'
+                      : 'border-slate-200/80 dark:border-white/[0.08] bg-slate-100/60 dark:bg-[#0E131F]/90'
                   }`}
                 >
                   {/* Column Header */}
-                  <div className="p-3.5 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between">
+                  <div className="p-3.5 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
                         <span
@@ -418,7 +418,7 @@ export const DueDateBoard: React.FC<DueDateBoardProps> = ({
                           due_date: getDateForBucket(col.id, todayISO),
                         })
                       }
-                      className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                      className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
                       title={tr(
                         '在此时间段新建任务',
                         'New task in this timeframe'

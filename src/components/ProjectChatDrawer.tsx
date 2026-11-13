@@ -576,7 +576,7 @@ export const ProjectChatDrawer: React.FC<ProjectChatDrawerProps> = ({
                                 className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
                                   isSelected
                                     ? 'hover:bg-white/20 text-white'
-                                    : 'text-slate-400 hover:text-indigo-500'
+                                    : 'text-slate-400 hover:text-blue-500'
                                 }`}
                                 title={tr('编辑群聊', 'Edit channel')}
                               >

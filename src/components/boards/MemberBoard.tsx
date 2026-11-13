@@ -67,8 +67,8 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
             onClick={() => setShowCollaboratedInColumn(!showCollaboratedInColumn)}
             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-medium transition-colors ${
               showCollaboratedInColumn
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-sm shadow-blue-500/20'
+                : 'bg-white dark:bg-[#141A29] border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-300'
             }`}
           >
             <UserCheck className="w-3.5 h-3.5" />
@@ -143,12 +143,12 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                 onDrop={(e) => handleDrop(e, mem.id)}
                 className={`w-80 flex flex-col h-full rounded-2xl border transition-all ${
                   isOver
-                    ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 ring-2 ring-indigo-500/20'
-                    : 'border-slate-200/80 dark:border-slate-800/80 bg-slate-100/60 dark:bg-[#0E1420]/90'
+                    ? 'drop-zone-active border-blue-500'
+                    : 'border-slate-200/80 dark:border-white/[0.08] bg-slate-100/60 dark:bg-[#0E131F]/90'
                 }`}
               >
                 {/* Member Header */}
-                <div className="p-3.5 border-b border-slate-200/70 dark:border-slate-800/80 space-y-2.5">
+                <div className="p-3.5 border-b border-slate-200/70 dark:border-white/[0.08] space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
@@ -176,7 +176,7 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                         <button
                           type="button"
                           onClick={() => onEditMember(mem)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                          className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
                           title={tr(
                             `编辑成员「${mem.name}」`,
                             `Edit member "${mem.name}"`
@@ -202,7 +202,7 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
                         <button
                           type="button"
                           onClick={() => onQuickCreate({ assignee_id: mem.id })}
-                          className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                          className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
                           title={tr(
                             `指派新任务给 ${mem.name}`,
                             `Assign new task to ${mem.name}`
@@ -288,11 +288,11 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
             onDrop={(e) => handleDrop(e, null)}
             className={`w-72 flex flex-col h-full rounded-2xl border transition-all ${
               dragOverMember === 'unassigned'
-                ? 'border-indigo-500 bg-indigo-500/5'
-                : 'border-slate-200/80 dark:border-slate-800/80 bg-slate-100/50 dark:bg-[#0E1420]/60'
+                ? 'drop-zone-active border-blue-500'
+                : 'border-slate-200/80 dark:border-white/[0.08] bg-slate-100/50 dark:bg-[#0E131F]/60'
             }`}
           >
-            <div className="p-3.5 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between">
+            <div className="p-3.5 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-slate-400" />
                 <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -329,7 +329,7 @@ export const MemberBoard: React.FC<MemberBoardProps> = ({
             <button
               type="button"
               onClick={onOpenNewMember}
-              className="w-60 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors"
+              className="w-60 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/[0.08] hover:border-blue-500/60 dark:hover:border-blue-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-blue-500 transition-colors bg-white/40 dark:bg-[#0E131F]/40"
             >
               <UserPlus className="w-6 h-6" />
               <span className="text-xs font-semibold">

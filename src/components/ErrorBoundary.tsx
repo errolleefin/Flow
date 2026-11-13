@@ -75,7 +75,7 @@ export class ErrorBoundary extends Component<
             <button
               type="button"
               onClick={this.handleReload}
-              className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/20 inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
+              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white text-xs font-bold shadow-lg shadow-blue-500/20 inline-flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <RefreshCw className="w-4 h-4" />
               重新加载工作台 (Reload Workspace)

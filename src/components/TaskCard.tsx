@@ -32,28 +32,28 @@ export const PRIORITY_CONFIG: Record<
     label: '紧急',
     labelEn: 'Urgent',
     badgeClass:
-      'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
+      'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
     dotColor: 'bg-rose-500',
   },
   high: {
     label: '高优',
     labelEn: 'High',
     badgeClass:
-      'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
     dotColor: 'bg-amber-500',
   },
   medium: {
     label: '普通',
     labelEn: 'Medium',
     badgeClass:
-      'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
-    dotColor: 'bg-indigo-500',
+      'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
+    dotColor: 'bg-sky-500',
   },
   low: {
     label: '较低',
     labelEn: 'Low',
     badgeClass:
-      'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30',
+      'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20',
     dotColor: 'bg-slate-400',
   },
 };
@@ -88,14 +88,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({
     completed:
       'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
     overdue:
-      'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/35 animate-pulse-subtle font-semibold',
+      'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25 animate-pulse-subtle font-semibold',
     due_today:
-      'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/35 font-semibold',
+      'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25 font-semibold',
     due_soon:
-      'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30',
+      'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
     upcoming:
       'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20',
-    none: 'bg-slate-500/5 text-slate-400 dark:text-slate-500 border-slate-500/15',
+    none: 'bg-slate-500/5 text-slate-400 dark:text-slate-500 border-slate-500/10',
   };
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
@@ -114,7 +114,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onClick={() => onSelect(task)}
-      className="group relative rounded-xl border border-slate-200/80 dark:border-slate-800/90 bg-white dark:bg-[#131924] hover:border-indigo-500/50 dark:hover:border-indigo-500/50 shadow-sm hover:shadow-md transition-all duration-150 p-3.5 cursor-grab active:cursor-grabbing select-none"
+      className="card-flow group relative rounded-xl border border-slate-200/80 dark:border-white/[0.08] bg-white dark:bg-[#141A29] hover:border-slate-300 dark:hover:border-white/[0.18] shadow-card hover:shadow-card-hover p-3.5 cursor-grab active:cursor-grabbing select-none"
     >
       {/* Top Row: Task Key + Project Name + Priority Badge */}
       <div className="flex items-center justify-between gap-2 mb-2">
@@ -163,7 +163,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             e.stopPropagation();
             onToggleDone(task);
           }}
-          className="mt-0.5 text-slate-400 hover:text-indigo-500 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors shrink-0"
+          className="mt-0.5 text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 transition-colors shrink-0"
           title={
             task.status === 'done'
               ? tr('标记为未完成', 'Mark as incomplete')
@@ -180,7 +180,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           className={`text-sm font-medium leading-snug line-clamp-2 ${
             task.status === 'done'
               ? 'line-through text-slate-400 dark:text-slate-500'
-              : 'text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-300'
+              : 'text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'
           } transition-colors`}
         >
           {task.title}
@@ -193,7 +193,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           {task.tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
-              className="px-1.5 py-0.5 text-[10px] rounded bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300"
+              className="px-1.5 py-0.5 text-[10px] rounded-md bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 font-medium"
             >
               #{tag}
             </span>
@@ -205,18 +205,18 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       {totalSubtasks > 0 && (
         <div className="mb-3">
           <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
-            <span className="inline-flex items-center gap-1">
-              <ListChecks className="w-3 h-3 text-indigo-500" />
+            <span className="inline-flex items-center gap-1 font-medium">
+              <ListChecks className="w-3 h-3 text-blue-500" />
               {tr('子任务进度', 'Subtasks')}
             </span>
-            <span className="font-mono">
+            <span className="font-mono text-[10px]">
               {completedSubtasks}/{totalSubtasks} ({subtaskPct}%)
             </span>
           </div>
-          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+          <div className="w-full h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-300 ${
-                subtaskPct === 100 ? 'bg-emerald-500' : 'bg-indigo-500'
+                subtaskPct === 100 ? 'bg-emerald-500' : 'bg-blue-500'
               }`}
               style={{ width: `${subtaskPct}%` }}
             />
@@ -225,7 +225,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       )}
 
       {/* Footer Row: Due Date + Related Personnel + Quick Actions */}
-      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/70">
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-white/[0.06]">
         {/* Due Date Badge */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span
@@ -256,7 +256,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               e.stopPropagation();
               onStartPomodoro(task);
             }}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-indigo-500/10 transition-all"
+            className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 dark:hover:bg-blue-500/20 transition-all"
             title={tr('开启专注番茄钟计时', 'Start Pomodoro focus timer')}
           >
             <Play className="w-3.5 h-3.5 fill-current" />
@@ -279,7 +279,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
           <div className="flex items-center -space-x-1.5">
             {assignee ? (
               <div
-                className={`w-6 h-6 rounded-full bg-gradient-to-br ${assignee.avatar_bg} text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#131924] shadow-sm`}
+                className={`w-6 h-6 rounded-full bg-gradient-to-br ${assignee.avatar_bg} text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#141A29] shadow-sm`}
                 title={tr(
                   `主负责人：${assignee.name} (${assignee.role})`,
                   `Assignee: ${assignee.name} (${assignee.role})`
@@ -289,7 +289,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               </div>
             ) : (
               <div
-                className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 text-[10px] flex items-center justify-center ring-2 ring-white dark:ring-[#131924]"
+                className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 text-[10px] flex items-center justify-center ring-2 ring-white dark:ring-[#141A29]"
                 title={tr('未指派主负责人', 'Unassigned')}
               >
                 <Users className="w-3 h-3" />
@@ -299,7 +299,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             {collaborators.slice(0, 2).map((collab) => (
               <div
                 key={collab.id}
-                className={`w-5 h-5 rounded-full bg-gradient-to-br ${collab.avatar_bg} text-white text-[9px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#131924] opacity-90`}
+                className={`w-5 h-5 rounded-full bg-gradient-to-br ${collab.avatar_bg} text-white text-[9px] font-medium flex items-center justify-center ring-2 ring-white dark:ring-[#141A29] opacity-90`}
                 title={tr(
                   `协作相关人员：${collab.name} (${collab.role})`,
                   `Collaborator: ${collab.name} (${collab.role})`
@@ -311,7 +311,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
 
             {collaborators.length > 2 && (
               <div
-                className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[9px] font-mono flex items-center justify-center ring-2 ring-white dark:ring-[#131924]"
+                className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[9px] font-mono flex items-center justify-center ring-2 ring-white dark:ring-[#141A29]"
                 title={tr(
                   `还有 ${collaborators.length - 2} 位协作人员`,
                   `+${collaborators.length - 2} more collaborators`

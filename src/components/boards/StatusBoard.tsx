@@ -44,8 +44,8 @@ export const STATUS_COLUMNS: Array<{
     id: 'todo',
     label: '待处理 Todo',
     labelEn: 'Todo',
-    accentColor: '#6366f1',
-    headerBg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+    accentColor: '#0284c7',
+    headerBg: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
     description: '已明确排期、待启动',
     descriptionEn: 'Scheduled & ready to start',
   },
@@ -107,7 +107,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
       case 'backlog':
         return <CircleDashed className="w-4 h-4 text-slate-400" />;
       case 'todo':
-        return <CircleDot className="w-4 h-4 text-indigo-500" />;
+        return <CircleDot className="w-4 h-4 text-sky-500" />;
       case 'in_progress':
         return <PlayCircle className="w-4 h-4 text-blue-500" />;
       case 'review':
@@ -140,12 +140,12 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
               onDrop={(e) => handleDrop(e, col.id)}
               className={`w-80 flex flex-col h-full rounded-2xl border transition-all ${
                 isOver
-                  ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200/80 dark:border-slate-800/80 bg-slate-100/60 dark:bg-[#0E1420]/90'
+                  ? 'drop-zone-active border-blue-500/50'
+                  : 'border-slate-200/80 dark:border-white/[0.08] bg-slate-100/60 dark:bg-[#0E131F]/90 shadow-xs'
               }`}
             >
               {/* Column Header */}
-              <div className="p-3.5 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between">
+              <div className="p-3.5 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {renderStatusIcon(col.id)}
                   <div>
@@ -153,7 +153,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
                       <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100">
                         {colLabel}
                       </h3>
-                      <span className="px-1.5 py-0.5 text-[11px] font-mono font-semibold rounded-md bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700">
+                      <span className="px-1.5 py-0.5 text-[11px] font-mono font-semibold rounded-md bg-white dark:bg-[#141A29] text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-white/[0.08]">
                         {colTasks.length}
                       </span>
                     </div>
@@ -174,7 +174,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
                   <button
                     type="button"
                     onClick={() => onQuickCreate({ status: col.id })}
-                    className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                    className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-white/[0.08] transition-colors"
                     title={tr(
                       `在「${colLabel}」下新建任务`,
                       `New task in "${colLabel}"`
@@ -188,7 +188,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
               {/* Cards Container */}
               <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
                 {colTasks.length === 0 ? (
-                  <div className="h-36 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 text-xs p-4 text-center">
+                  <div className="h-36 rounded-xl border border-dashed border-slate-200 dark:border-white/[0.08] flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 text-xs p-4 text-center">
                     <span>
                       {tr(
                         '拖拽卡片至此列自动更新状态',
@@ -198,7 +198,7 @@ export const StatusBoard: React.FC<StatusBoardProps> = ({
                     <button
                       type="button"
                       onClick={() => onQuickCreate({ status: col.id })}
-                      className="mt-2 text-indigo-500 hover:underline text-[11px] font-medium"
+                      className="mt-2 text-blue-500 hover:underline text-[11px] font-medium"
                     >
                       {tr('+ 添加首条任务', '+ Add first task')}
                     </button>

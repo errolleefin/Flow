@@ -129,11 +129,11 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
         onClick={onClose}
         aria-label={tr('关闭详情抽屉背景', 'Close task detail drawer')}
       />
-      <aside className="relative z-10 w-full max-w-2xl h-full bg-white dark:bg-[#0F1522] border-l border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col overflow-hidden">
+      <aside className="relative z-10 w-full max-w-2xl h-full bg-white dark:bg-[#0E131F] border-l border-slate-200 dark:border-white/[0.08] shadow-2xl flex flex-col overflow-hidden">
         {/* Drawer Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-white/[0.08] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+            <span className="px-2 py-0.5 rounded-md font-mono text-xs font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
               {task.task_key}
             </span>
             <span className="text-xs text-slate-400">
@@ -148,7 +148,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             <button
               type="button"
               onClick={() => onStartPomodoro(task)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-semibold transition-colors"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold transition-colors btn-tactile"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               {tr('开启番茄专注', 'Start Pomodoro')}
@@ -177,7 +177,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -206,7 +206,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                       onUpdateTask(task.id, { title: title.trim() });
                     }
                   }}
-                  className="w-full text-base font-bold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-indigo-500 focus:outline-none pb-1 transition-colors"
+                  className="w-full text-base font-bold text-slate-900 dark:text-white bg-transparent border-b border-transparent hover:border-slate-300 dark:hover:border-slate-700 focus:border-blue-500 focus:outline-none pb-1 transition-colors"
                 />
               </div>
 
@@ -227,17 +227,17 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                     '输入详细的任务验收标准、技术方案或相关文档链接...',
                     'Enter detailed acceptance criteria, technical specs, or links...'
                   )}
-                  className="w-full text-xs leading-relaxed rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 p-3 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
+                  className="w-full text-xs leading-relaxed rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#141A29] p-3 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
                 />
               </div>
             </div>
 
             {/* 2. Core 4-Dimension Attributes Grid */}
-            <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div className="p-4 rounded-2xl border border-slate-200/80 dark:border-white/[0.08] bg-slate-50/50 dark:bg-black/20 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               {/* Project */}
               <div>
                 <label className="flex items-center gap-1.5 text-slate-400 font-medium mb-1">
-                  <FolderKanban className="w-3.5 h-3.5 text-indigo-500" />
+                  <FolderKanban className="w-3.5 h-3.5 text-blue-500" />
                   {tr('所属项目名', 'Project')}
                 </label>
                 <select
@@ -245,7 +245,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                   onChange={(e) =>
                     onUpdateTask(task.id, { project_id: e.target.value })
                   }
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#141A29] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
                 >
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -268,7 +268,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                       status: e.target.value as TaskStatus,
                     })
                   }
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#141A29] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
                 >
                   <option value="backlog">
                     {tr('待规划 (Backlog)', 'Backlog')}
@@ -302,12 +302,12 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                         due_date: e.target.value || null,
                       })
                     }
-                    className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                    className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#141A29] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
                   />
                   <button
                     type="button"
                     onClick={() => onUpdateTask(task.id, { due_date: todayISO })}
-                    className="px-2 py-1.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 hover:bg-indigo-500 hover:text-white text-[11px] transition-colors"
+                    className="px-2 py-1.5 rounded-lg bg-slate-200/70 dark:bg-white/[0.08] hover:bg-blue-500 hover:text-white text-[11px] transition-colors"
                   >
                     {tr('今天', 'Today')}
                   </button>
@@ -318,7 +318,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                         due_date: addDaysISO(todayISO, 1),
                       })
                     }
-                    className="px-2 py-1.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 hover:bg-indigo-500 hover:text-white text-[11px] transition-colors"
+                    className="px-2 py-1.5 rounded-lg bg-slate-200/70 dark:bg-white/[0.08] hover:bg-blue-500 hover:text-white text-[11px] transition-colors"
                   >
                     {tr('明天', 'Tmrw')}
                   </button>
@@ -337,7 +337,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                       priority: e.target.value as TaskPriority,
                     })
                   }
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#141A29] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
                 >
                   <option value="urgent">
                     {tr('🔥 紧急 (Urgent)', '🔥 Urgent')}
@@ -363,7 +363,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                       assignee_id: e.target.value || null,
                     })
                   }
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#141A29] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-blue-500"
                 >
                   <option value="">
                     {tr('未指派负责人', 'Unassigned')}
@@ -419,7 +419,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                         logged_minutes_delta: 30,
                       } as any)
                     }
-                    className="px-2.5 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-semibold"
+                    className="px-2.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[11px] font-semibold transition-colors"
                   >
                     {tr('+30m 工时', '+30m Log')}
                   </button>
@@ -430,7 +430,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             {/* 3. Related Collaborators Multi-Select */}
             <div className="space-y-2">
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                <Users className="w-3.5 h-3.5 text-indigo-500" />
+                <Users className="w-3.5 h-3.5 text-blue-500" />
                 {tr(
                   '协同相关人员（点击切换参与人，与人员看板实时联动）',
                   'Collaborators (Click to toggle participation, synced with Team Workload board)'
@@ -447,8 +447,8 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                       onClick={() => toggleCollaborator(mem.id)}
                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-all ${
                         isCollab
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-indigo-500/50'
+                          ? 'bg-blue-600 text-white border-blue-500 shadow-sm shadow-blue-500/20'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-700'
                       }`}
                     >
                       <span
@@ -471,20 +471,20 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             {/* 4. Tags Management */}
             <div className="space-y-2">
               <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                <Tag className="w-3.5 h-3.5 text-indigo-500" />
+                <Tag className="w-3.5 h-3.5 text-blue-500" />
                 {tr('任务标签', 'Tags')}
               </label>
               <div className="flex flex-wrap items-center gap-1.5">
                 {task.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 text-xs border border-slate-200/50 dark:border-slate-700/50"
                   >
                     #{tag}
                     <button
                       type="button"
                       onClick={() => handleRemoveTag(tag)}
-                      className="text-slate-400 hover:text-rose-500"
+                      className="text-slate-400 hover:text-rose-500 transition-colors"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -496,7 +496,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                     value={newTagText}
                     onChange={(e) => setNewTagText(e.target.value)}
                     placeholder={tr('+ 输入标签回车', '+ Add tag & Enter')}
-                    className="px-2.5 py-1 w-32 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-transparent text-xs focus:outline-none focus:border-indigo-500"
+                    className="px-2.5 py-1 w-32 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-transparent text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 text-slate-800 dark:text-slate-200"
                   />
                 </form>
               </div>
@@ -506,13 +506,13 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             <div className="space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800">
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100">
-                  <ListChecks className="w-4 h-4 text-indigo-500" />
+                  <ListChecks className="w-4 h-4 text-blue-500" />
                   {tr(
                     `子任务拆解清单 (${completedSubCount}/${totalSubCount})`,
                     `Subtasks Checklist (${completedSubCount}/${totalSubCount})`
                   )}
                 </label>
-                <span className="text-xs font-mono text-indigo-500 font-semibold">
+                <span className="text-xs font-mono text-blue-500 font-semibold">
                   {subPct}%
                 </span>
               </div>
@@ -520,7 +520,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
               {totalSubCount > 0 && (
                 <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                    className="h-full bg-blue-600 rounded-full transition-all duration-300"
                     style={{ width: `${subPct}%` }}
                   />
                 </div>
@@ -530,7 +530,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                 {task.subtasks.map((sub) => (
                   <div
                     key={sub.id}
-                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/60 dark:border-slate-800/80 group"
+                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/60 dark:border-slate-800/80 group hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
                   >
                     <button
                       type="button"
@@ -597,11 +597,11 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                     '添加新的拆解子步骤，按回车保存...',
                     'Add a new subtask step and press Enter...'
                   )}
-                  className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs focus:outline-none focus:border-indigo-500"
+                  className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 text-slate-800 dark:text-slate-200"
                 />
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium inline-flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white text-xs font-medium inline-flex items-center gap-1 transition-all shadow-sm shadow-blue-500/20"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   {tr('添加', 'Add')}
@@ -610,10 +610,10 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
             </div>
           </fieldset>
 
-          {/* 6. Comments & Activity Audit Stream */}
+            {/* 6. Comments & Activity Audit Stream */}
           <div className="space-y-3 pt-2 border-t border-slate-200/70 dark:border-slate-800">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-100">
-              <MessageSquare className="w-4 h-4 text-indigo-500" />
+              <MessageSquare className="w-4 h-4 text-blue-500" />
               {tr(
                 `协作评论与属性变更动态 (${task.activities.length})`,
                 `Comments & Activity Stream (${task.activities.length})`
@@ -634,11 +634,11 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                     '同步最新进展或 @相关人员...',
                     'Share an update or @mention team members...'
                   )}
-                  className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs focus:outline-none focus:border-indigo-500"
+                  className="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 text-slate-800 dark:text-slate-200"
                 />
                 <button
                   type="submit"
-                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium inline-flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white text-xs font-medium inline-flex items-center gap-1 transition-all shadow-sm shadow-blue-500/20"
                 >
                   <Send className="w-3.5 h-3.5" />
                   {tr('发送', 'Send')}
@@ -657,7 +657,7 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                     key={act.id}
                     className={`p-3 rounded-xl text-xs border ${
                       act.type === 'comment'
-                        ? 'bg-indigo-500/5 border-indigo-500/20 text-slate-800 dark:text-slate-100'
+                        ? 'bg-blue-500/5 border-blue-500/20 text-slate-800 dark:text-slate-100'
                         : 'bg-slate-50/70 dark:bg-slate-900/50 border-slate-200/50 dark:border-slate-800/60 text-slate-500'
                     }`}
                   >
