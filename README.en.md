@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/Vercel%20%2B%20Supabase-Supported-000000?logo=vercel&logoColor=white" alt="Vercel" />
   <img src="https://img.shields.io/badge/PostgreSQL%20%2F%20Supabase-pg%208.23%2B-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/Release-v0.3-6366F1" alt="Release v0.3" />
+  <img src="https://img.shields.io/badge/Release-v0.3.0-3B82F6" alt="Release v0.3.0" />
   <img src="https://img.shields.io/badge/License-GPL--3.0-blue" alt="License GPL-3.0" />
 </p>
 
@@ -30,10 +30,10 @@
 ### 1. Built-in AI Assistant (OpenAI-Compatible + Persistent Configuration)
 - **Web-Based Visual Configuration & Persistent Storage**: Configure any OpenAI-compatible endpoint directly in the web UI (OpenAI, DeepSeek, SiliconFlow, DashScope, OpenRouter, local Ollama, etc.). The Base URL, Model name, and API Key are permanently persisted in the database. Only Super Admins can open the endpoint settings, and a saved API Key is only ever shown masked.
 - **Natural Language Task Decomposition & Database Ingestion**: Send conversational commands or paste raw meeting notes to automatically create, update, or delete projects, team members (primary assignee + collaborators), tasks, due dates (`YYYY-MM-DD`), 4-tier priorities, and structured checklists (`Subtasks`).
-- **Interactive Execution Receipts**: Every database action performed by the AI generates an interactive receipt card in the chat stream. Click any task receipt to inspect its detail drawer while all boards synchronize in real time.
+- **Interactive Execution Receipts**: Every database action performed by the AI generates an interactive receipt card in the chat stream (covering creations, updates, deletions, and clear skip notices). Click any task receipt to inspect its detail drawer while all boards synchronize in real time.
 
 ### 2. Five Synchronized Multi-Dimensional Boards (Bi-Directional Drag & Drop)
-Switch instantaneously between 5 views backed by a single source of truth. Dragging and dropping a task card across columns in any board automatically updates the corresponding underlying attribute:
+Switch instantaneously between 5 views backed by a single source of truth. Dragging and dropping a task card across columns in any board automatically updates the corresponding underlying attribute (all board action buttons are strictly gated by RBAC permissions):
 1. **Status Kanban Board**: Advance tasks across `Backlog -> Todo -> In Progress -> Review / Blocked -> Done`. Dragging across columns updates `status`.
 2. **Project Dimension Board**: Group tasks by `Project` with color-coded headers, completion progress bars, and overdue indicators. Supports creating, editing, and deleting projects, while dragging cards across columns migrates `project_id`.
 3. **Personnel Workload Board**: Organize work by `Team Member` with real-time weekly capacity saturation bars (`<70% Optimal` / `70~100% Near Capacity` / `>100% Overloaded`). Supports creating, editing, and safely removing members, toggling between "Primary Assignee Only" and "Include Collaborators", and dragging across columns to reassign `assignee_id`.
@@ -60,24 +60,25 @@ Switch instantaneously between 5 views backed by a single source of truth. Dragg
 ### 4. Custom Project Communication Group Chats
 - **Multi-Channel Project Group Chats with Project Theme Color Sync**: Open the **Group Chat** drawer from the top header toolbar (the trigger button, drawer header, channel cards, badges, and send button automatically adopt the bound project's theme color). Create, edit, and delete custom communication channels (either linked to a specific project or configured as a cross-project channel with custom participant lists).
 - **Interactive `@Member` & `#TASK-KEY` References**: Quick-insert `@member` mentions and `#TASK-KEY` task badges into messages. Clicking any `#TASK-KEY` chip in the message stream opens that task's detail drawer immediately.
-- **Bottom-Right New Message Popup Notifications & Per-Channel Mute**: Incoming group chat messages trigger a project-colored popup notification in the bottom-right corner of the workspace with one-click actions to open the channel or mute it. Users can mute or unmute (`Mute`) any individual group chat from the channel list, active channel header, or notification popup.
+- **Bottom-Right New Message Popup Notifications & Per-Channel Mute**: Incoming group chat messages trigger a project-colored popup notification in the bottom-right corner of the workspace with one-click actions to open the channel or mute it. Users can mute or unmute (`Mute`) any individual group chat from the channel list, active channel header, or notification popup. Polling uses deep-equality checks and timestamp comparisons to prevent unnecessary re-renders and false deletion notices.
 
-### 5. Developer-Grade UI/UX & Productivity Tooling
+### 5. Developer-Grade UI/UX Design System & Productivity Tooling
+- **Obsidian & Electric Sapphire Visual System**: Features a layered Obsidian dark canvas (`#090D14` / `#0E131F` / `#141A29`) paired with crisp Electric Sapphire accents (`#3B82F6` / `#2563EB`), frosted-glass headers and modals (`.glass-header` / `.glass-modal`), subtle hairline borders (`border-white/[0.08]`), and `Inter` + `JetBrains Mono` typography with OpenType optical and tabular-number features.
+- **Tactile Micro-Interactions & Fault Tolerance**: Enjoy smooth card elevation on hover, tactile button press states, and highlighted drag-and-drop zones; all message/comment/AI inputs respect IME composition (`isComposing`) to avoid premature submission; protected by a top-level React `ErrorBoundary` fallback with one-click recovery.
 - **Streamlined Sidebar with Drag-to-Reorder Views, Collapsible Sections, Top-5 View & Pinning**: The 5 Board Views in the left sidebar support **custom drag-and-drop reordering and view pinning**, while both Projects and Team Members sections support **click-to-collapse/expand**, **showing the top 5 items by default with a one-click "Show All" toggle**, and **pinning (`Pin`) individual projects or members** to the top.
 - **Right-Aligned Top Action Toolbar**: All workspace utility and action buttons starting from Export (`JSON` / `CSV`), Import, Clear Workspace, Language Toggle (`中 / EN`), Theme Toggle, Group Chat, AI Assistant, and New Task are cleanly right-aligned at the top of the page with zero duplicate menus between sidebar and header (Import and Clear Workspace are shown to Super Admins only).
 - **Subtask Completion Timestamps**: Checking off a subtask in the task detail drawer automatically records the completion time (`completed_at`) and displays the formatted timestamp on the right side of the subtask row.
 - **Full Lifecycle Management for Projects & Personnel**: Create, edit, and delete projects and team members directly from the sidebar or board column headers. Deleting a member safely unassigns their tasks without data loss.
 - **Keyboard-First Navigation**: Press `Ctrl/Cmd + K` for the global Command Palette, `N` for quick task creation, `Ctrl/Cmd + J` to toggle the AI Assistant, and `Esc` to dismiss active drawers or modals.
 - **Rich Task Detail Drawer**: Break down tasks into subtasks with progress tracking, assign multiple collaborators, manage custom tags, post team comments, and review automated activity audit logs.
-- **Built-in Pomodoro Focus Timer**: Floating 25-minute focus timer that automatically logs completed focus sessions into a task's actual time spent.
-- **Dual Theme, Bilingual UI & Full Data Sovereignty**: Switch seamlessly between Crisp Light and Linear Dark themes, toggle the entire workspace UI between **Simplified Chinese (`中文`) and English (`EN`)** with one click, export/import full workspace backups via JSON, or export task reports to CSV.
-
+- **Built-in Pomodoro Focus Timer**: Floating 25-minute focus timer with a 30-second minimum threshold guard, automatically accumulating completed focus time via atomic increments (`logged_minutes_delta`).
+- **Dual Theme, Bilingual UI & Full Data Sovereignty**: Switch seamlessly between Crisp Light and Obsidian Dark themes, toggle the entire workspace UI between **Simplified Chinese (`中文`) and English (`EN`)** with one click, export/import full workspace backups via JSON, or export task reports to CSV.
 
 ### 6. Cloud-Native Dual Storage Engines & Data Integrity (SQLite + PostgreSQL / Supabase)
 - **Seamless Dual Engine Switching**: Runs out-of-the-box on zero-dependency Node.js native SQLite (`node:sqlite`). Simply setting `DATABASE_URL` seamlessly switches the entire storage backend to PostgreSQL / Supabase.
-- **Automated Idempotent Migrations & RLS Hardening**: Idempotently creates 11 relational tables and applies column migrations on first connection. Every table enables Row Level Security (RLS) to prevent credential or data exposure via the Supabase Data API.
-- **Atomic Transactions & Concurrency Safety**: JSON workspace imports are pre-validated and executed atomically within a database transaction. Unique task keys use PostgreSQL advisory locks to eliminate race conditions under concurrent creation.
-- **Security Audit & Key Masking**: AI API keys are stored safely and masked in responses to prevent SSRF and leakage. Production dependencies have 0 CVE vulnerabilities with an in-depth security audit report [`20261022_code-review.md`](./20261022_code-review.md).
+- **Automated Idempotent Migrations, Indexing & RLS Hardening**: Idempotently creates 11 relational tables and applies column migrations on first connection, includes foreign-key/status indexes for SQLite, scopes bootstrap loading strictly to visible tasks, and enables Row Level Security (RLS) on every table to prevent credential or data exposure via the Supabase Data API.
+- **Atomic Transactions & Concurrency Safety**: JSON workspace imports are pre-validated and executed atomically within a database transaction. Unique task keys use PostgreSQL advisory locks and explicit `project_id` validation to prevent cross-project collisions under concurrent creation.
+- **Security Audit & Container Hardening**: AI API keys are stored safely and masked in responses to prevent SSRF and leakage; the Docker image runs as a non-root `node` user; production dependencies have 0 CVE vulnerabilities with an in-depth security audit report [`20261022_code-review.md`](./20261022_code-review.md).
 
 ---
 
