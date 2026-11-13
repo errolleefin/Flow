@@ -74,7 +74,7 @@ const PROJECT_COLORS = [
 ];
 
 const AVATAR_GRADIENTS = [
-  { label: '靛蓝紫', labelEn: 'Indigo', value: 'from-indigo-500 to-purple-600' },
+  { label: '极光蓝', labelEn: 'Azure', value: 'from-blue-600 to-cyan-600' },
   { label: '翡翠绿', labelEn: 'Emerald', value: 'from-emerald-500 to-teal-600' },
   { label: '深海蓝', labelEn: 'Ocean', value: 'from-blue-500 to-cyan-600' },
   { label: '珊瑚粉', labelEn: 'Coral', value: 'from-rose-500 to-pink-600' },
@@ -279,14 +279,14 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
-      <div className="w-full max-w-xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111726] shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-xl rounded-2xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#111726] shadow-modal overflow-hidden">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-white/[0.08] flex items-center justify-between">
           <div className="flex items-center gap-2">
             {mode === 'task' && (
               <>
-                <Plus className="w-4 h-4 text-indigo-500" />
+                <Plus className="w-4 h-4 text-blue-500" />
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                   {tr('新建工作 Todo 任务', 'Create Work Todo Task')}
                 </h3>
@@ -354,7 +354,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                   '例如：完成 Q4 核心支付链路压测与监控接入',
                   'e.g., Complete Q4 core payment pipeline load testing & monitoring'
                 )}
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-slate-900/80 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all"
               />
             </div>
 
@@ -475,8 +475,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                         onClick={() => toggleCollab(m.id)}
                         className={`px-2.5 py-1 rounded-full border text-xs transition-all ${
                           selected
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                            ? 'bg-blue-600 text-white border-blue-500 shadow-sm shadow-blue-500/20'
+                            : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-700'
                         }`}
                       >
                         {m.name}
@@ -554,7 +554,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold shadow-sm inline-flex items-center gap-2"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold shadow-sm shadow-blue-500/25 inline-flex items-center gap-2"
               >
                 {isSubmitting
                   ? tr('创建中...', 'Creating...')
@@ -611,7 +611,7 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                     type="button"
                     onClick={() => setProjColor(c)}
                     className={`w-7 h-7 rounded-full transition-transform ${
-                      projColor === c ? 'scale-125 ring-2 ring-indigo-500' : ''
+                      projColor === c ? 'scale-125 ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900' : ''
                     }`}
                     style={{ backgroundColor: c }}
                   />
@@ -726,8 +726,8 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
                       g.value
                     } ${
                       memAvatarBg === g.value
-                        ? 'ring-2 ring-indigo-500'
-                        : 'opacity-75'
+                        ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 shadow-md'
+                        : 'opacity-75 hover:opacity-100'
                     }`}
                   >
                     {tr(g.label, g.labelEn)}

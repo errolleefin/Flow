@@ -1405,7 +1405,7 @@ export const App: React.FC = () => {
               style={{
                 borderLeftColor: notif.projectColor,
               }}
-              className="pointer-events-auto rounded-2xl border border-slate-200/90 dark:border-slate-700/90 border-l-4 bg-white/95 dark:bg-[#111827]/95 backdrop-blur-md shadow-2xl p-3.5 transition-all"
+              className="pointer-events-auto rounded-2xl border border-slate-200/90 dark:border-white/[0.08] border-l-4 bg-white/95 dark:bg-[#141A29]/95 backdrop-blur-md shadow-card-hover p-3.5 transition-all"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
@@ -1513,10 +1513,10 @@ export const App: React.FC = () => {
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-xs font-semibold shadow-lg transition-all ${
+          className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-xs font-semibold shadow-lg backdrop-blur-sm transition-all ${
             toast.type === 'error'
-              ? 'bg-rose-600 text-white'
-              : 'bg-slate-900 dark:bg-indigo-600 text-white'
+              ? 'bg-rose-600 text-white shadow-rose-500/25'
+              : 'bg-slate-900 dark:bg-blue-600 text-white shadow-blue-500/25'
           }`}
         >
           {toast.message}

@@ -49,7 +49,7 @@ export const ROLE_META: Record<
     labelEn: 'Super Admin',
     desc: '拥有全部项目可视、增删改查以及账号管理权限',
     descEn: 'Full access to all projects, tasks, members, and account management',
-    badgeClass: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
+    badgeClass: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
     defaultPermissions: {
       visible_project_ids: 'all',
       can_create_project: true,
@@ -342,12 +342,12 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
   const memberMap = new Map(members.map((m) => [m.id, m]));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-xs p-4">
-      <div className="w-full max-w-5xl h-[85vh] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1522] shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+      <div className="w-full max-w-5xl h-[85vh] rounded-2xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#0F1522] shadow-modal flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-indigo-500/10 via-purple-500/5 to-transparent">
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-white/[0.08] flex items-center justify-between bg-slate-50/60 dark:bg-[#0E131F]/90">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm shadow-blue-500/25">
               <Shield className="w-5 h-5" />
             </div>
             <div>
@@ -375,18 +375,18 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
         </div>
 
         {/* Body: Left Account List + Right Create/Edit Form */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-800 overflow-hidden">
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-white/[0.08] overflow-hidden">
           {/* Left Column: Existing Accounts (5 cols) */}
           <div className="lg:col-span-5 flex flex-col min-h-0 bg-slate-50/50 dark:bg-[#0B0F19]/60">
-            <div className="px-5 py-3 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-5 py-3 border-b border-slate-200/80 dark:border-white/[0.08] flex items-center justify-between">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-indigo-500" />
+                <Users className="w-4 h-4 text-blue-500" />
                 {tr(`系统账号列表 (${users.length})`, `Accounts (${users.length})`)}
               </span>
               <button
                 type="button"
                 onClick={resetForm}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white text-[11px] font-semibold shadow-sm shadow-blue-500/20 transition-all"
               >
                 <Plus className="w-3 h-3" />
                 {tr('新建账号', 'New Account')}
@@ -419,8 +419,8 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       onClick={() => handleSelectEdit(u)}
                       className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
                         isEditing
-                          ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 ring-2 ring-indigo-500/20'
-                          : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#131926] hover:border-indigo-500/40'
+                          ? 'border-blue-500 bg-blue-500/5 dark:bg-blue-500/10 ring-2 ring-blue-500/20'
+                          : 'border-slate-200/80 dark:border-white/[0.06] bg-white dark:bg-[#131926] hover:border-slate-400 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -450,7 +450,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                                 : tr('未绑定人员', 'Unbound')}
                             </span>
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
-                              <FolderKanban className="w-3 h-3 text-indigo-500" />
+                              <FolderKanban className="w-3 h-3 text-blue-500" />
                               {visCount}
                             </span>
                           </div>
@@ -463,7 +463,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                               e.stopPropagation();
                               handleSelectEdit(u);
                             }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             title={tr('编辑账号', 'Edit account')}
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -493,10 +493,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
             onSubmit={handleSubmit}
             className="lg:col-span-7 flex flex-col min-h-0 overflow-y-auto p-6 space-y-5 text-xs"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/[0.08] pb-3">
               <div className="flex items-center gap-2">
                 {editingUser ? (
-                  <Pencil className="w-4 h-4 text-indigo-500" />
+                  <Pencil className="w-4 h-4 text-blue-500" />
                 ) : (
                   <UserPlus className="w-4 h-4 text-emerald-500" />
                 )}
@@ -513,7 +513,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="text-xs text-indigo-500 hover:underline"
+                  className="text-xs text-blue-500 hover:underline"
                 >
                   {tr('切换为新建账号', 'Switch to Create Mode')}
                 </button>
@@ -609,7 +609,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       type="checkbox"
                       checked={autoCreateMember}
                       onChange={(e) => setAutoCreateMember(e.target.checked)}
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-0"
+                      className="rounded border-slate-300 text-blue-600 focus:ring-0"
                     />
                     <span>
                       {tr(
@@ -643,8 +643,8 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       onClick={() => handleRoleChange(rKey)}
                       className={`p-2.5 rounded-xl border text-left transition-all ${
                         active
-                          ? 'border-indigo-600 bg-indigo-600 text-white shadow-sm'
-                          : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:border-indigo-500/50'
+                          ? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="font-bold text-xs">
@@ -652,7 +652,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                       </div>
                       <div
                         className={`text-[10px] mt-0.5 line-clamp-2 ${
-                          active ? 'text-indigo-100' : 'text-slate-400'
+                          active ? 'text-blue-100' : 'text-slate-400'
                         }`}
                       >
                         {tr(meta.desc, meta.descEn)}
@@ -679,10 +679,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                         visible_project_ids: 'all',
                       }))
                     }
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
                       permissions.visible_project_ids === 'all'
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                        ? 'bg-blue-600 text-white border-blue-500 shadow-sm shadow-blue-500/20'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                     }`}
                   >
                     {tr('全部项目可视', 'All Projects Visible')}
@@ -696,10 +696,10 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                         visible_project_ids: projects.map((p) => p.id),
                       }))
                     }
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all ${
                       Array.isArray(permissions.visible_project_ids)
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'
+                        ? 'bg-blue-600 text-white border-blue-500 shadow-sm shadow-blue-500/20'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                     }`}
                   >
                     {tr('指定可视项目', 'Specific Projects Only')}
@@ -724,7 +724,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                           onClick={() => toggleProjectVisibility(p.id)}
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all ${
                             checked
-                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              ? 'bg-blue-600 text-white border-blue-500 shadow-sm shadow-blue-500/20'
                               : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
                           }`}
                         >
@@ -801,7 +801,7 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
                           [item.key]: e.target.checked,
                         }))
                       }
-                      className="rounded border-slate-300 text-indigo-600 focus:ring-0"
+                      className="rounded border-slate-300 text-blue-600 focus:ring-0"
                     />
                     <span className="text-[11px] font-medium">{item.label}</span>
                   </label>
@@ -813,13 +813,13 @@ export const AccountManagementModal: React.FC<AccountManagementModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
               >
                 {tr('关闭', 'Close')}
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-sm"
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.98] transition-all text-white font-semibold shadow-sm shadow-blue-500/25"
               >
                 {editingUser
                   ? tr('保存账号与权限修改', 'Save Account & Permissions')

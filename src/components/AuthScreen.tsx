@@ -94,15 +94,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-screen flex flex-col justify-between bg-slate-50 dark:bg-[#090D16] text-slate-900 dark:text-slate-100 p-6 select-none">
+    <div className="relative min-h-screen w-screen flex flex-col justify-between bg-slate-50 dark:bg-[#090D14] text-slate-900 dark:text-slate-100 p-6 select-none overflow-hidden">
+      {/* Ambient background glow */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-blue-500/10 dark:bg-blue-600/10 rounded-full blur-3xl pointer-events-none -z-0" />
+
       {/* Top Bar: Brand + Language & Theme Switcher */}
-      <div className="flex items-center justify-between max-w-5xl w-full mx-auto">
+      <div className="relative z-10 flex items-center justify-between max-w-5xl w-full mx-auto">
         <div className="flex items-center gap-2.5">
-          <FlowLogo className="w-9 h-9 rounded-xl shadow-md shadow-indigo-500/20" />
+          <FlowLogo className="w-9 h-9 rounded-xl shadow-md shadow-blue-500/20" />
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-lg tracking-tight">Flow</span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+              <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
                 v0.3.0
               </span>
             </div>
@@ -119,34 +122,34 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           <button
             type="button"
             onClick={toggleLang}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-indigo-500/50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#141A29] text-xs font-semibold text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-white/[0.18] transition-colors"
           >
-            <Languages className="w-3.5 h-3.5 text-indigo-500" />
+            <Languages className="w-3.5 h-3.5 text-blue-500" />
             <span>{lang === 'zh' ? '中 / EN' : 'EN / 中'}</span>
           </button>
           <button
             type="button"
             onClick={onToggleDarkMode}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-indigo-500/50 transition-colors"
+            className="p-2 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#141A29] text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-white/[0.18] transition-colors"
           >
             {darkMode ? (
               <Sun className="w-4 h-4 text-amber-400" />
             ) : (
-              <Moon className="w-4 h-4 text-indigo-600" />
+              <Moon className="w-4 h-4 text-blue-500" />
             )}
           </button>
         </div>
       </div>
 
       {/* Center Card */}
-      <div className="w-full max-w-md mx-auto my-8">
-        <div className="rounded-3xl border border-slate-200/90 dark:border-slate-800/90 bg-white dark:bg-[#111726] shadow-2xl overflow-hidden">
+      <div className="relative z-10 w-full max-w-md mx-auto my-8">
+        <div className="rounded-3xl border border-slate-200/90 dark:border-white/[0.08] bg-white/95 dark:bg-[#111726]/95 backdrop-blur-xl shadow-modal overflow-hidden animate-pop-in">
           {/* Card Header */}
-          <div className="px-7 pt-7 pb-5 border-b border-slate-100 dark:border-slate-800/80 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold mb-3">
+          <div className="px-7 pt-7 pb-5 border-b border-slate-100 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02]">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-[11px] font-bold mb-3">
               {!initialized ? (
                 <>
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
                   {tr(
                     '首次部署初始化 · 设置超级管理员',
                     'First-Time Setup · Super Admin'
@@ -154,7 +157,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </>
               ) : (
                 <>
-                  <Lock className="w-3.5 h-3.5" />
+                  <Lock className="w-3.5 h-3.5 text-blue-500" />
                   {tr('安全工作区登录', 'Workspace Sign In')}
                 </>
               )}
@@ -199,7 +202,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder={tr('例如：admin 或 zhangming', 'e.g., admin')}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0E131F] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
               />
             </div>
 
@@ -217,7 +220,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder={tr('例如：陈默 (超级管理员)', 'e.g., Alex Chen')}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0E131F] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                 />
               </div>
             )}
@@ -234,7 +237,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={tr('输入密码（至少 4 位）', 'Enter password (min 4 chars)')}
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0E131F] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                 />
               </div>
             </div>
@@ -253,21 +256,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder={tr('再次输入密码', 'Re-enter password')}
-                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full pl-10 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-[#0E131F] text-sm text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
                     />
                   </div>
                 </div>
 
-                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/20 cursor-pointer">
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={createMember}
                     onChange={(e) => setCreateMember(e.target.checked)}
-                    className="mt-0.5 rounded border-indigo-400 text-indigo-600 focus:ring-0"
+                    className="mt-0.5 rounded border-blue-400 text-blue-600 focus:ring-0"
                   />
                   <div className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
                     <span className="font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-1">
-                      <UserCheck className="w-3.5 h-3.5 text-indigo-500" />
+                      <UserCheck className="w-3.5 h-3.5 text-blue-500" />
                       {tr(
                         '自动在「相关人员」中创建并绑定同名成员',
                         'Auto-create and bind a matching Member in Team Personnel'
@@ -285,7 +288,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white text-sm font-bold shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 transition-all mt-2"
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-bold shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 transition-all btn-tactile mt-2"
             >
               {!initialized ? (
                 <>
@@ -311,7 +314,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="text-center text-[11px] text-slate-400">
+      <div className="relative z-10 text-center text-[11px] text-slate-400">
         Flow Workspace v0.3.0 · Released under GPL-3.0 License
       </div>
     </div>

@@ -78,8 +78,8 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
               onDrop={(e) => handleDrop(e, proj.id)}
               className={`w-84 flex flex-col h-full rounded-2xl border transition-all ${
                 isOver
-                  ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 ring-2 ring-indigo-500/20'
-                  : 'border-slate-200/80 dark:border-slate-800/80 bg-slate-100/60 dark:bg-[#0E1420]/90'
+                  ? 'drop-zone-active border-blue-500'
+                  : 'border-slate-200/80 dark:border-white/[0.08] bg-slate-100/60 dark:bg-[#0E131F]/90'
               }`}
               style={{ width: '330px' }}
             >
@@ -90,7 +90,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
               />
 
               {/* Project Column Header */}
-              <div className="p-3.5 border-b border-slate-200/70 dark:border-slate-800/80 space-y-2.5">
+              <div className="p-3.5 border-b border-slate-200/70 dark:border-white/[0.08] space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onEditProject(proj)}
-                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
                         title={tr(
                           `编辑项目「${proj.name}」`,
                           `Edit project "${proj.name}"`
@@ -145,7 +145,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onQuickCreate({ project_id: proj.id })}
-                        className="p-1 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
+                        className="p-1 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-800 transition-colors"
                         title={tr(
                           `在「${proj.name}」下新建任务`,
                           `New task in "${proj.name}"`
@@ -200,7 +200,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onQuickCreate({ project_id: proj.id })}
-                        className="mt-2 text-indigo-500 hover:underline text-[11px] font-medium"
+                        className="mt-2 text-blue-500 hover:underline text-[11px] font-medium"
                       >
                         {tr('+ 新建该项目任务', '+ New project task')}
                       </button>
@@ -234,7 +234,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           <button
             type="button"
             onClick={onOpenNewProject}
-            className="w-64 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-indigo-500/60 dark:hover:border-indigo-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition-colors bg-white/40 dark:bg-slate-900/30"
+            className="w-64 h-40 shrink-0 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/[0.08] hover:border-blue-500/60 dark:hover:border-blue-500/60 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-blue-500 transition-colors bg-white/40 dark:bg-[#0E131F]/40"
           >
             <FolderPlus className="w-6 h-6" />
             <span className="text-xs font-semibold">

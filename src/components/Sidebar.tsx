@@ -66,7 +66,7 @@ export const BOARD_VIEWS: Array<{
     shortDesc: '敏捷工作流阶段推进',
     shortDescEn: 'Agile workflow stage progression',
     icon: Kanban,
-    badgeColor: 'text-indigo-500',
+    badgeColor: 'text-blue-500',
   },
   {
     id: 'project',
@@ -113,27 +113,27 @@ const ROLE_LABELS: Record<
   admin: {
     zh: '管理员',
     en: 'Admin',
-    badge: 'bg-rose-500/15 text-rose-500 border-rose-500/30',
+    badge: 'bg-rose-500/10 text-rose-500 border border-rose-500/20',
   },
   boss: {
     zh: '老板',
     en: 'Boss',
-    badge: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
+    badge: 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
   },
   director: {
     zh: '项目主管',
     en: 'Director',
-    badge: 'bg-indigo-500/15 text-indigo-500 border-indigo-500/30',
+    badge: 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
   },
   lead: {
     zh: '组长',
     en: 'Team Lead',
-    badge: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
+    badge: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20',
   },
   member: {
     zh: '成员',
     en: 'Member',
-    badge: 'bg-slate-500/15 text-slate-500 border-slate-500/30',
+    badge: 'bg-slate-500/10 text-slate-500 border border-slate-500/20',
   },
 };
 
@@ -318,16 +318,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     : null;
 
   return (
-    <aside className="w-60 shrink-0 h-screen border-r border-slate-200/80 dark:border-slate-800/80 bg-white/95 dark:bg-[#0D121D] flex flex-col select-none">
+    <aside className="w-60 shrink-0 h-screen border-r border-slate-200/80 dark:border-white/[0.08] bg-white/95 dark:bg-[#0E131F] flex flex-col select-none">
       {/* Brand Header */}
-      <div className="px-4 py-3.5 border-b border-slate-200/70 dark:border-slate-800/80 flex items-center justify-between">
+      <div className="px-4 py-3.5 border-b border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <FlowLogo className="w-7 h-7 shrink-0 shadow-sm shadow-indigo-500/20 rounded-xl" />
+          <FlowLogo className="w-7 h-7 shrink-0 shadow-sm shadow-blue-500/20 rounded-xl" />
           <div className="flex items-center gap-1.5">
             <span className="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white">
               Flow
             </span>
-            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
+            <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
               v0.3.0
             </span>
           </div>
@@ -381,13 +381,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     setDragOverViewId(null);
                   }}
                   onClick={() => onSelectView(view.id)}
-                  className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
+                  className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 font-semibold'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25 font-semibold'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.05]'
                   } ${
                     isDragOver
-                      ? 'ring-2 ring-indigo-500 bg-indigo-500/10'
+                      ? 'ring-2 ring-blue-500 bg-blue-500/10'
                       : ''
                   } ${draggingViewId === view.id ? 'opacity-50' : ''}`}
                 >
@@ -398,7 +398,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     >
                       <GripVertical
                         className={`w-3 h-3 shrink-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-70 transition-opacity ${
-                          isActive ? 'text-indigo-200' : 'text-slate-400'
+                          isActive ? 'text-blue-200' : 'text-slate-400'
                         }`}
                       />
                     </span>
@@ -415,7 +415,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         className={`w-2.5 h-2.5 shrink-0 ${
                           isActive
                             ? 'text-white fill-white/40'
-                            : 'text-indigo-500 fill-indigo-500/30'
+                            : 'text-blue-500 fill-blue-500/30'
                         }`}
                       />
                     )}
@@ -447,8 +447,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         isActive
                           ? 'hover:bg-white/20 text-white'
                           : isPinned
-                            ? 'text-indigo-500'
-                            : 'text-slate-400 hover:text-indigo-500'
+                            ? 'text-blue-500'
+                            : 'text-slate-400 hover:text-blue-500'
                       }`}
                       title={
                         isPinned
@@ -489,7 +489,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={onOpenNewProject}
-                className="p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-1 rounded-md text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
                 title={tr('新建项目', 'New Project')}
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -504,8 +504,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => onUpdateFilter({ projectId: 'all' })}
                 className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                   filters.projectId === 'all'
-                    ? 'bg-slate-100 dark:bg-slate-800/90 text-indigo-600 dark:text-indigo-400 font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
+                    ? 'bg-slate-100 dark:bg-white/[0.08] text-blue-600 dark:text-blue-400 font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-white/[0.04]'
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -528,8 +528,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     key={proj.id}
                     className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                       isSelected
-                        ? 'bg-slate-100 dark:bg-slate-800/90 text-indigo-600 dark:text-indigo-400 font-semibold'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
+                        ? 'bg-slate-100 dark:bg-white/[0.08] text-blue-600 dark:text-blue-400 font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-white/[0.04]'
                     }`}
                   >
                     <button
@@ -547,7 +547,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       />
                       <span className="truncate">{proj.name}</span>
                       {proj.pinned && (
-                        <Pin className="w-2.5 h-2.5 text-indigo-500 fill-indigo-500/30 shrink-0" />
+                        <Pin className="w-2.5 h-2.5 text-blue-500 fill-blue-500/30 shrink-0" />
                       )}
                     </button>
 
@@ -565,8 +565,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             }}
                             className={`p-1 rounded transition-colors ${
                               proj.pinned
-                                ? 'text-indigo-500 bg-indigo-500/10'
-                                : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                                ? 'text-blue-500 bg-blue-500/10'
+                                : 'text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700'
                             }`}
                             title={
                               proj.pinned
@@ -584,7 +584,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               e.stopPropagation();
                               onEditProject(proj);
                             }}
-                            className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                            className="p-1 rounded text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
                             title={tr('编辑项目', 'Edit Project')}
                           >
                             <Pencil className="w-3 h-3" />
@@ -613,7 +613,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAllProjects((prev) => !prev)}
-                  className="w-full px-2.5 py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 rounded-lg text-left transition-colors"
+                  className="w-full px-2.5 py-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 rounded-lg text-left transition-colors"
                 >
                   {showAllProjects
                     ? tr('收起（仅显示前 5 项）', 'Show top 5')
@@ -651,7 +651,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={onOpenNewMember}
-                className="p-1 rounded-md text-slate-400 hover:text-indigo-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="p-1 rounded-md text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
                 title={tr('新增团队成员', 'New Team Member')}
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -675,8 +675,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     key={mem.id}
                     className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
                       isSelected
-                        ? 'bg-slate-100 dark:bg-slate-800/90 text-indigo-600 dark:text-indigo-400 font-semibold'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-slate-800/40'
+                        ? 'bg-slate-100 dark:bg-white/[0.08] text-blue-600 dark:text-blue-400 font-semibold'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100/70 dark:hover:bg-white/[0.04]'
                     }`}
                   >
                     <button
@@ -695,7 +695,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </span>
                       <span className="truncate">{mem.name}</span>
                       {mem.pinned && (
-                        <Pin className="w-2.5 h-2.5 text-indigo-500 fill-indigo-500/30 shrink-0" />
+                        <Pin className="w-2.5 h-2.5 text-blue-500 fill-blue-500/30 shrink-0" />
                       )}
                     </button>
 
@@ -713,8 +713,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             }}
                             className={`p-1 rounded transition-colors ${
                               mem.pinned
-                                ? 'text-indigo-500 bg-indigo-500/10'
-                                : 'text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700'
+                                ? 'text-blue-500 bg-blue-500/10'
+                                : 'text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700'
                             }`}
                             title={
                               mem.pinned
@@ -733,7 +733,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 e.stopPropagation();
                                 onEditMember(mem);
                               }}
-                              className="p-1 rounded text-slate-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+                              className="p-1 rounded text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700 transition-colors"
                               title={tr('编辑成员', 'Edit Member')}
                             >
                               <Pencil className="w-3 h-3" />
@@ -761,7 +761,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAllMembers((prev) => !prev)}
-                  className="w-full px-2.5 py-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 rounded-lg text-left transition-colors"
+                  className="w-full px-2.5 py-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 rounded-lg text-left transition-colors"
                 >
                   {showAllMembers
                     ? tr('收起（仅显示前 5 项）', 'Show top 5')
@@ -777,26 +777,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Footer: Account Management Menu (Left Sidebar Only) + Current User Card */}
-      <div className="p-2.5 border-t border-slate-200/70 dark:border-slate-800/80 bg-slate-50/70 dark:bg-[#0B0F17]/70 space-y-1.5">
+      <div className="p-2.5 border-t border-slate-200/70 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#090D14]/70 space-y-1.5">
         {currentUser && (
           <>
             {canManageAccounts && (
               <button
                 type="button"
                 onClick={onOpenAccountModal}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-semibold transition-colors"
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-semibold transition-colors"
               >
                 <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
                   {tr('账号管理', 'Account Management')}
                 </span>
                 <span className="text-[10px] font-mono opacity-80">RBAC</span>
               </button>
             )}
 
-            <div className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-xl bg-white dark:bg-[#141A29] border border-slate-200/70 dark:border-white/[0.08]">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-600 to-cyan-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 shadow-xs">
                   {currentUser.display_name.slice(0, 1).toUpperCase()}
                 </div>
                 <div className="min-w-0">
